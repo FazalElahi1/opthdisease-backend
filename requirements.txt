@@ -1,0 +1,35 @@
+# ── Web framework ────────────────────────────────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.12
+
+# ── Auth / security ───────────────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+
+# ── Data / validation ─────────────────────────────────────────────────────────
+pydantic==2.8.2
+pydantic[email]==2.8.2
+email-validator==2.2.0
+python-dotenv==1.0.1
+
+# ── HTTP client (also used to call the ML service) ────────────────────────────
+httpx==0.27.2
+
+# ── Firebase / Cloud ──────────────────────────────────────────────────────────
+firebase-admin==6.5.0
+cloudinary==1.41.0
+
+# ── Scheduler (escrow auto-release) ─────────────────────────────────────────────
+apscheduler==3.10.4
+
+# ── Agora (video-call RTC tokens) ───────────────────────────────────────────────
+agora-token-builder==1.0.0
+
+# ── ML inference is OFFLOADED to the Hugging Face Space (ML_SERVICE_URL) ───────
+# torch / torchvision / opencv / numpy / Pillow are intentionally NOT installed
+# here so the API fits Render's free 512MB. routers/xai.py POSTs to ML_SERVICE_URL
+# instead of importing the model. (For a local torch fallback, install the ML deps
+# into your local venv manually — they are not needed in production.)
+# Removed: stripe (migrated to JazzCash).

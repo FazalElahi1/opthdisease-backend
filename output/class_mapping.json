@@ -1,0 +1,10 @@
+{
+  "Normal": 0,
+  "Diabetes": 1,
+  "Glaucoma": 2,
+  "Cataract": 3,
+  "AMD": 4,
+  "Hypertension": 5,
+  "Myopia": 6,
+  "Others": 7
+}

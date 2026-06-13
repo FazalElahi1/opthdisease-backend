@@ -1,0 +1,50 @@
+# Environment & secrets
+.env
+firebase-credentials.json
+*.json.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+env/
+.venv/
+
+# ML model files (too large for git)
+output/*.pt
+output/*.ptl
+output/*.onnx
+
+# Training dataset & ML artifacts — not needed by the API (inference runs on the
+# Hugging Face Space). Keeps the repo small and avoids pushing the dataset.
+ml/data/
+ml/assets/
+ml/mobile_model/
+ml/output/
+
+# Extra secret patterns (defensive)
+.env.*
+*-credentials.json
+*serviceAccount*.json
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Agora web-test config (contains a temporary token)
+_webclient_config.json

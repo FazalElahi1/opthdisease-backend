@@ -1,0 +1,69 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+from routers import auth, users, appointments, calls, scans, admin, analytics, xai, reviews
+from routers import jazzcash_payments, jazzcash_payouts
+from services.firebase import get_firebase_app
+from services.escrow import start_scheduler
+from services.ratings import start_rating_scheduler
+
+load_dotenv()
+get_firebase_app()
+
+app = FastAPI(
+    title       = "OpthdiseaseAI API",
+    description = "Telemedicine + AI eye screening — complete backend",
+    version     = "5.0.0",
+    docs_url    = "/docs",
+    redoc_url   = "/redoc",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins     = ["*"],
+    allow_credentials = True,
+    allow_methods     = ["*"],
+    allow_headers     = ["*"],
+)
+
+app.include_router(auth.router)                # /auth/*
+app.include_router(users.router)               # /users/*
+app.include_router(appointments.router)        # /appointments/*
+app.include_router(jazzcash_payments.router)   # /jazzcash/*  (real JazzCash sandbox)
+app.include_router(jazzcash_payouts.router)    # /payouts/*
+app.include_router(calls.router)               # /calls/*
+app.include_router(scans.router)               # /scans/*
+app.include_router(admin.router)               # /admin/*
+app.include_router(analytics.router)           # /analytics/*
+app.include_router(xai.router)                 # /xai/*
+app.include_router(reviews.router)             # /reviews/*
+
+
+@app.on_event("startup")
+async def _startup():
+    # Start the escrow auto-release scheduler (releases held funds after the
+    # cooling period when there is no complaint).
+    start_scheduler()
+    # Start the weekly doctor-rating snapshot (Mon 00:00 UTC); seeds once at boot.
+    start_rating_scheduler()
+
+
+@app.get("/")
+async def root():
+    return {
+        "status":  "ok",
+        "app":     "OpthdiseaseAI API",
+        "version": "5.0.0",
+        "docs":    "/docs",
+    }
+
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

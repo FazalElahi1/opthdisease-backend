@@ -1,0 +1,173 @@
+{
+    "_meta": {
+      "version": "1.0.0",
+      "description": "Canonical schema for all patient metadata used in Stage-2 risk adjustment. All fields are optional. Missing fields are masked to zero and the mask vector tells the model which fields were actually provided.",
+      "total_feature_dim": 32,
+      "note": "symptom_text is free-text; it gets TF-IDF encoded into a 10-dim vector at runtime using the symptom_vocabulary below."
+    },
+  
+    "fields": {
+      "age": {
+        "type": "continuous",
+        "unit": "years",
+        "range": [0, 120],
+        "normalisation": "divide_by_100",
+        "feature_index": 0,
+        "missing_value": 0,
+        "clinical_note": "Age is a strong risk factor for AMD, Cataract, Glaucoma."
+      },
+      "gender": {
+        "type": "categorical",
+        "encoding": "one_hot",
+        "categories": ["male", "female", "other"],
+        "feature_indices": [1, 2, 3],
+        "missing_value": [0, 0, 0],
+        "clinical_note": "Males have higher glaucoma risk; females higher AMD risk post-menopause."
+      },
+      "systolic_bp": {
+        "type": "continuous",
+        "unit": "mmHg",
+        "range": [60, 250],
+        "normalisation": "divide_by_200",
+        "feature_index": 4,
+        "missing_value": 0,
+        "clinical_note": "High systolic BP directly causes Hypertensive Retinopathy."
+      },
+      "diastolic_bp": {
+        "type": "continuous",
+        "unit": "mmHg",
+        "range": [40, 150],
+        "normalisation": "divide_by_120",
+        "feature_index": 5,
+        "missing_value": 0,
+        "clinical_note": "Used together with systolic_bp."
+      },
+      "fasting_glucose": {
+        "type": "continuous",
+        "unit": "mg/dL",
+        "range": [40, 600],
+        "normalisation": "divide_by_400",
+        "feature_index": 6,
+        "missing_value": 0,
+        "clinical_note": "High fasting glucose strongly correlates with Diabetic Retinopathy."
+      },
+      "hba1c": {
+        "type": "continuous",
+        "unit": "percent",
+        "range": [3.0, 15.0],
+        "normalisation": "divide_by_15",
+        "feature_index": 7,
+        "missing_value": 0,
+        "clinical_note": "HbA1c > 7% increases DR risk significantly."
+      },
+      "smoking": {
+        "type": "categorical",
+        "encoding": "one_hot",
+        "categories": ["never", "former", "current"],
+        "feature_indices": [8, 9, 10],
+        "missing_value": [0, 0, 0],
+        "clinical_note": "Current smoking doubles AMD and cataract risk."
+      },
+      "family_history": {
+        "type": "multi_binary",
+        "encoding": "binary_flags",
+        "flags": [
+          "glaucoma",
+          "amd",
+          "diabetic_retinopathy",
+          "cataract",
+          "hypertension",
+          "diabetes"
+        ],
+        "feature_indices": [11, 12, 13, 14, 15, 16],
+        "missing_value": [0, 0, 0, 0, 0, 0],
+        "clinical_note": "First-degree family history multiplies individual disease risk."
+      },
+      "symptoms_encoded": {
+        "type": "tfidf_vector",
+        "dim": 10,
+        "feature_indices": [17, 18, 19, 20, 21, 22, 23, 24, 25, 26],
+        "source_field": "symptom_text",
+        "missing_value": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "clinical_note": "Free-text symptoms encoded via TF-IDF against symptom_vocabulary."
+      },
+      "mask_vector": {
+        "type": "binary_mask",
+        "dim": 5,
+        "feature_indices": [27, 28, 29, 30, 31],
+        "description": "1 = field was provided, 0 = field was missing. Allows model to learn from missingness pattern.",
+        "mask_fields": ["age", "bp", "glucose_hba1c", "smoking", "family_history"]
+      }
+    },
+  
+    "symptom_vocabulary": [
+      "blurred vision",
+      "double vision",
+      "floaters",
+      "flashes",
+      "eye pain",
+      "redness",
+      "headache",
+      "halos",
+      "night blindness",
+      "loss of peripheral vision",
+      "distorted vision",
+      "wavy lines",
+      "sensitivity to light",
+      "dry eyes",
+      "itching",
+      "discharge",
+      "fever",
+      "nausea",
+      "fatigue",
+      "dizziness"
+    ],
+  
+    "csv_column_names": {
+      "image_filename":  "Required. Filename only e.g. img001.jpg",
+      "age":             "Optional. Integer years e.g. 45",
+      "gender":          "Optional. male | female | other",
+      "blood_pressure":  "Optional. Systolic/Diastolic string e.g. 130/85",
+      "fasting_glucose": "Optional. Float mg/dL e.g. 126.0",
+      "hba1c":           "Optional. Float percent e.g. 7.2",
+      "smoking":         "Optional. never | former | current",
+      "family_history":  "Optional. Comma-separated flags e.g. glaucoma,diabetes",
+      "symptom_text":    "Optional. Free text e.g. blurred vision, eye pain, headache"
+    },
+  
+    "csv_example_rows": [
+      {
+        "image_filename": "AMD/img001.jpg",
+        "age": 72,
+        "gender": "female",
+        "blood_pressure": "140/88",
+        "fasting_glucose": "",
+        "hba1c": "",
+        "smoking": "former",
+        "family_history": "amd",
+        "symptom_text": "blurred central vision, wavy lines"
+      },
+      {
+        "image_filename": "Diabetic_Retinopathy/img002.jpg",
+        "age": 54,
+        "gender": "male",
+        "blood_pressure": "150/95",
+        "fasting_glucose": 210,
+        "hba1c": 8.5,
+        "smoking": "current",
+        "family_history": "diabetes,hypertension",
+        "symptom_text": "floaters, blurred vision"
+      },
+      {
+        "image_filename": "Normal/img003.jpg",
+        "age": "",
+        "gender": "",
+        "blood_pressure": "",
+        "fasting_glucose": "",
+        "hba1c": "",
+        "smoking": "",
+        "family_history": "",
+        "symptom_text": ""
+      }
+    ]
+  }
