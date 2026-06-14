@@ -57,6 +57,12 @@ PASSWORD       = os.getenv("JAZZCASH_PASSWORD", "")
 INTEGRITY_SALT = os.getenv("JAZZCASH_INTEGRITY_SALT", "")
 JAZZCASH_ENV   = os.getenv("JAZZCASH_ENV", "sandbox").lower()
 APP_BASE_URL   = os.getenv("APP_BASE_URL", "").rstrip("/")
+# pp_TxnType for the hosted checkout. Empty "" = JazzCash's dual card+wallet page,
+# but some sandbox merchants are only enabled for a single type and then reject the
+# transaction with "insufficient merchant information". "MWALLET" forces the JazzCash
+# mobile-wallet flow (usually enabled on sandbox). Override via env to experiment:
+#   MWALLET (wallet), MPAY / MIGS (card), or "" (dual page).
+TXN_TYPE       = os.getenv("JAZZCASH_TXN_TYPE", "MWALLET")
 
 CURRENCY = "PKR"
 # JazzCash uses Pakistan Standard Time (UTC+5) for txn timestamps.
@@ -147,7 +153,7 @@ def build_checkout(
 
     fields = {
         "pp_Version":          PP_VERSION,
-        "pp_TxnType":          "",                      # empty ⇒ hosted page (card + wallet)
+        "pp_TxnType":          TXN_TYPE,                 # default MWALLET; "" = dual card+wallet page (see TXN_TYPE)
         "pp_Language":         "EN",
         "pp_MerchantID":       MERCHANT_ID,
         "pp_SubMerchantID":    "",
