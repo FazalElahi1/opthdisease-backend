@@ -194,8 +194,8 @@ async def register(body: RegisterRequest):
             "license_number_norm": normalise_license(body.license_number or ""),
             "license_status":   "pending",
             "specialties":      body.specialties or [],
-            "experience_years": 0,
-            "about":            "",
+            "experience_years": body.experience or 0,
+            "about":            body.description or "",
             "price":            0,
             "is_verified":      False,
             "created_at":       now,
@@ -211,8 +211,11 @@ async def register(body: RegisterRequest):
             doctor_name    = body.name,
             doctor_email   = body.email,
             license_number = body.license_number or "Not provided",
-            specialties    = [],
+            specialties    = body.specialties or [],
             phone          = body.phone or "",
+            gender         = body.gender or "",
+            experience     = body.experience or 0,
+            description    = body.description or "",
         )
         return build_token_response({**user_doc}, is_new_user=True)
 

@@ -21,6 +21,8 @@ class RegisterRequest(BaseModel):
     gender:         Optional[str] = None          # patients only
     license_number: Optional[str] = None          # doctors only
     specialties:    Optional[List[str]] = None    # doctors only
+    experience:     Optional[int] = None          # doctors only — years of experience
+    description:    Optional[str] = None          # doctors only — short bio / about
 
     @field_validator("password")
     @classmethod

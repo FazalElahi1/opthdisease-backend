@@ -23,7 +23,11 @@ _DOCTOR_PRIVATE_FIELDS = ("password_hash", "session_token", "phone", "phoneNumbe
 
 def _public_doctor(d: dict) -> dict:
     """Strip private fields from a doctor doc before sending it to a patient."""
-    return {k: v for k, v in d.items() if k not in _DOCTOR_PRIVATE_FIELDS}
+    pub = {k: v for k, v in d.items() if k not in _DOCTOR_PRIVATE_FIELDS}
+    # Expose an explicit boolean the app can rely on (the stored field is
+    # `license_status`; the client used to filter on a non-existent `is_verified`).
+    pub["is_verified"] = d.get("license_status") == "verified"
+    return pub
 from services.notifications import get_current_user
 # ── END CHANGE 1 ───────────────────────────────────────────────────────────────
 

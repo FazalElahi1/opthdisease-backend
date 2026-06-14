@@ -88,10 +88,16 @@ def send_admin_new_doctor_application(
     license_number: str,
     specialties:    list,
     phone:          str,
+    gender:         str = "",
+    experience:     int = 0,
+    description:    str = "",
     admin_review_url: str = "",
 ) -> bool:
     """Email sent to admin when a new doctor registers."""
     spec_str = ", ".join(specialties) if specialties else "Not specified"
+    gender_str = (gender or "Not specified").capitalize()
+    exp_str    = f"{experience} year(s)" if experience else "Not specified"
+    desc_str   = description.strip() or "Not provided"
     review_btn = f"""
       <a href="{admin_review_url}" style="
         display: inline-block; background: #1E40AF; color: white;
@@ -120,6 +126,12 @@ def send_admin_new_doctor_application(
               <td style="padding:10px;border:1px solid #E2E8F0;color:#0F172A">{spec_str}</td></tr>
           <tr><td style="padding:10px;background:#F8FAFC;border:1px solid #E2E8F0;font-weight:bold;color:#475569">Phone</td>
               <td style="padding:10px;border:1px solid #E2E8F0;color:#0F172A">{phone}</td></tr>
+          <tr><td style="padding:10px;background:#F8FAFC;border:1px solid #E2E8F0;font-weight:bold;color:#475569">Gender</td>
+              <td style="padding:10px;border:1px solid #E2E8F0;color:#0F172A">{gender_str}</td></tr>
+          <tr><td style="padding:10px;background:#F8FAFC;border:1px solid #E2E8F0;font-weight:bold;color:#475569">Experience</td>
+              <td style="padding:10px;border:1px solid #E2E8F0;color:#0F172A">{exp_str}</td></tr>
+          <tr><td style="padding:10px;background:#F8FAFC;border:1px solid #E2E8F0;font-weight:bold;color:#475569">Description</td>
+              <td style="padding:10px;border:1px solid #E2E8F0;color:#0F172A">{desc_str}</td></tr>
         </table>
         {review_btn}
         <p style="color: #64748B; font-size: 13px; margin-top: 24px;">
