@@ -1,0 +1,58 @@
+# Render Blueprint — provisions the OpthdiseaseAI API as a free web service.
+# ML inference is offloaded to the Hugging Face Space (ML_SERVICE_URL); this
+# service is torch-free so it fits Render's free 512MB tier.
+services:
+  - type: web
+    name: opthdisease-backend
+    runtime: python
+    plan: free
+    region: singapore            # closest free region to Pakistan
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      # ── Non-secret config (safe to commit) ──────────────────────────────────
+      - key: PYTHON_VERSION
+        value: "3.11.9"          # pin: local is 3.9 (EOL); avoid Render defaulting to 3.13
+      - key: ML_SERVICE_URL
+        value: https://fazal17-opthdiseaseml.hf.space
+      - key: APP_BASE_URL
+        value: https://opthdisease-backend.onrender.com   # update if Render appends a name suffix
+      - key: JAZZCASH_MERCHANT_ID
+        value: MC787133
+      - key: JAZZCASH_ENV
+        value: sandbox
+      - key: ADMIN_EMAIL
+        value: f.elahi1767@gmail.com
+      - key: GMAIL_USER
+        value: f.elahi1767@gmail.com
+      - key: CLOUDINARY_CLOUD_NAME
+        value: dzyjvx2ru
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRE_MINUTES
+        value: "10080"
+      - key: TOKEN_EXPIRY_SECONDS
+        value: "3600"
+      # ── Secrets (sync:false → Render prompts you; never stored in git) ───────
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: AGORA_APP_ID
+        sync: false
+      - key: AGORA_APP_CERTIFICATE
+        sync: false
+      - key: JAZZCASH_PASSWORD
+        sync: false
+      - key: JAZZCASH_INTEGRITY_SALT
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
