@@ -124,6 +124,16 @@ async def create_session(
     except ValueError:
         release_at = None
 
+    # Fail fast if the key is missing — gives a clear error instead of a Stripe SDK crash.
+    if not os.getenv("STRIPE_SECRET_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Stripe payments are not configured: STRIPE_SECRET_KEY is not set. "
+                "Add it (sk_test_…) in your Render environment variables, then redeploy."
+            ),
+        )
+
     # Create the Stripe Checkout Session. success/cancel URLs route back through
     # /stripe/return, which 302s to the eyedisease:// scheme the WebView intercepts.
     try:
@@ -135,8 +145,22 @@ async def create_session(
             cancel_url  = f"{APP_BASE_URL}/stripe/return?token={txn_ref}&status=cancel",
         )
     except Exception as e:
-        logger.exception("Stripe create-session failed")
-        raise HTTPException(status_code=502, detail=f"Could not start payment: {e}")
+        logger.exception("Stripe create-session failed: %s", e)
+        err_str = str(e)
+        if "No API key" in err_str or "authentication" in err_str.lower():
+            detail = (
+                "Stripe authentication failed — verify STRIPE_SECRET_KEY (sk_test_…) "
+                "is set correctly in Render environment variables."
+            )
+        elif "currency" in err_str.lower():
+            detail = (
+                f"Stripe rejected currency '{os.getenv('STRIPE_CURRENCY', 'pkr')}'. "
+                "Enable this currency in your Stripe Dashboard → Settings → Currencies, "
+                "or change STRIPE_CURRENCY to 'usd' in Render env vars."
+            )
+        else:
+            detail = f"Could not start payment: {e}"
+        raise HTTPException(status_code=502, detail=detail)
 
     _col(COL_PAYMENT_SESSIONS).document(txn_ref).set({
         "token":             txn_ref,

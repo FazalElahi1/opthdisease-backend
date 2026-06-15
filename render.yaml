@@ -20,7 +20,7 @@ services:
       - key: APP_BASE_URL
         value: https://opthdisease-backend.onrender.com   # update if Render appends a name suffix; Stripe success/cancel URLs are built from it
       - key: STRIPE_CURRENCY
-        value: pkr               # use "pkr" only if your Stripe test account accepts PKR presentment
+        value: usd               # use "pkr" only if your Stripe test account accepts PKR presentment
       - key: ADMIN_EMAIL
         value: f.elahi1767@gmail.com
       - key: GMAIL_USER

@@ -77,6 +77,7 @@ def _compute_balance(doctor_id: str) -> dict:
     released_total = 0
     pending_total  = 0     # held (cooling) + disputed
     transactions   = []
+    now_utc = datetime.now(timezone.utc)
     for appt in completed:
         price  = appt.get("price_pkr", 0)
         escrow = appt.get("escrow_status", "held")
@@ -84,13 +85,26 @@ def _compute_balance(doctor_id: str) -> dict:
             released_total += price
         elif escrow in ("held", "disputed"):
             pending_total += price
+
+        completed_at_str = appt.get("completed_at")
+        days_since = 0
+        if completed_at_str:
+            try:
+                completed_dt = datetime.fromisoformat(completed_at_str.replace("Z", "+00:00"))
+                if completed_dt.tzinfo is None:
+                    completed_dt = completed_dt.replace(tzinfo=timezone.utc)
+                days_since = max(0, (now_utc - completed_dt).days)
+            except (ValueError, TypeError):
+                days_since = 0
+
         transactions.append({
             "appointment_id": appt.get("appointment_id", ""),
             "patient_name":   appt.get("patient_name", "Patient"),
-            "completed_at":   appt.get("completed_at"),
+            "completed_at":   completed_at_str,
             "amount_pkr":     price,
             "escrow_status":  escrow,
             "is_available":   escrow == "released",
+            "days_since":     days_since,
         })
 
     # Funds already claimed by payout requests (requested OR paid) can't be re-requested.

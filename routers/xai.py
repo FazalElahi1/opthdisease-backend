@@ -20,6 +20,7 @@ from pathlib import Path
 from services.firebase import (
     _col,
     COL_SCANS,
+    COL_APPOINTMENTS,
     COL_NOTIFICATIONS,
     get_doctor_doc,
 )
@@ -147,35 +148,46 @@ async def analyze_with_xai(
     recommendation   = ""
 
     if not body.offline_mode:
-        try:
-            from services.gemini_service import analyze_eye_image_with_restriction
-            gemini = await analyze_eye_image_with_restriction(
+        import asyncio
+        from services.gemini_service import (
+            analyze_eye_image_with_restriction,
+            generate_personalized_recommendation,
+        )
+        _offline_findings = _build_offline_findings(ml_result)
+
+        # Run findings + recommendation concurrently — saves 3-8 s vs sequential.
+        # Recommendation uses offline findings as its context so it doesn't need
+        # to wait for the Gemini findings call to finish first.
+        _findings_res, _rec_res = await asyncio.gather(
+            analyze_eye_image_with_restriction(
                 image_base64   = body.image_base64,
                 blood_pressure = body.blood_pressure,
                 sugar_level    = body.sugar_level,
                 clinical_info  = body.clinical_info,
-            )
-            findings         = gemini.get("findings", "")
-            affected_regions = gemini.get("affectedRegions", affected_regions)
-        except Exception as e:
-            print(f"[XAI] Gemini findings unavailable, using offline findings: {e}")
-            findings = _build_offline_findings(ml_result)
-
-        # Personalized recommendation — specific to THIS scan (condition, risk,
-        # findings, age, BP, sugar). Generated only when online via Gemini.
-        try:
-            from services.gemini_service import generate_personalized_recommendation
-            recommendation = await generate_personalized_recommendation(
+            ),
+            generate_personalized_recommendation(
                 disease        = ml_result["predicted_class"],
                 risk_level     = ml_result["risk_level"],
-                findings       = findings or _build_offline_findings(ml_result),
+                findings       = _offline_findings,
                 blood_pressure = body.blood_pressure,
                 sugar_level    = body.sugar_level,
                 patient_age    = body.patient_age or current_user.get("age"),
-            )
-        except Exception as e:
-            print(f"[XAI] Gemini recommendation unavailable: {e}")
+            ),
+            return_exceptions=True,
+        )
+
+        if isinstance(_findings_res, Exception):
+            print(f"[XAI] Gemini findings unavailable: {_findings_res}")
+            findings = _offline_findings
+        else:
+            findings         = _findings_res.get("findings", "")
+            affected_regions = _findings_res.get("affectedRegions", affected_regions)
+
+        if isinstance(_rec_res, Exception):
+            print(f"[XAI] Gemini recommendation unavailable: {_rec_res}")
             recommendation = ""
+        else:
+            recommendation = str(_rec_res)
 
         try:
             _col(COL_SCANS).document(scan_id).set({
@@ -271,6 +283,28 @@ async def share_report(
     doctor = get_doctor_doc(body.doctor_id)
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found.")
+
+    # ── Payment gate: patient must have a paid/confirmed/completed appointment ────
+    # with this specific doctor before they can share a scan with them.
+    paid_appts = list(
+        _col(COL_APPOINTMENTS)
+        .where("patient_id", "==", current_user["user_id"])
+        .where("doctor_id", "==", body.doctor_id)
+        .stream()
+    )
+    has_paid = any(
+        a.to_dict().get("status") in ("paid", "confirmed", "completed")
+        for a in paid_appts
+    )
+    if not has_paid:
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                f"Please book and pay for a consultation with Dr. {doctor.get('name', '')} "
+                "before sharing a scan with them."
+            ),
+        )
+    # ── END payment gate ─────────────────────────────────────────────────────────
 
     # ── Limit: one PENDING scan per doctor ───────────────────────────────────────
     # A patient may not send a second scan to the same doctor while a previously
