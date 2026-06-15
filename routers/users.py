@@ -153,22 +153,30 @@ async def upload_doctor_image(
     if current_user.get("role") != UserRole.DOCTOR.value:
         raise HTTPException(status_code=403, detail="Only doctors can upload a profile image.")
 
-    cloudinary.config(
-        cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
-        api_key=os.getenv("CLOUDINARY_API_KEY"),
-        api_secret=os.getenv("CLOUDINARY_API_SECRET"),
-    )
+    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
+    api_key    = os.getenv("CLOUDINARY_API_KEY")
+    api_secret = os.getenv("CLOUDINARY_API_SECRET")
+    if not all([cloud_name, api_key, api_secret]):
+        raise HTTPException(
+            status_code=503,
+            detail="Image upload service is temporarily unavailable. Please contact support.",
+        )
 
-    contents = await file.read()
-    result = cloudinary.uploader.upload(
-        contents,
-        folder="doctor_profiles",
-        public_id=current_user["user_id"],
-        overwrite=True,
-        resource_type="image",
-    )
+    cloudinary.config(cloud_name=cloud_name, api_key=api_key, api_secret=api_secret)
+
+    try:
+        contents = await file.read()
+        result = cloudinary.uploader.upload(
+            contents,
+            folder="doctor_profiles",
+            public_id=current_user["user_id"],
+            overwrite=True,
+            resource_type="image",
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="Image upload failed. Please try again.")
+
     secure_url: str = result["secure_url"]
-
     set_doctor_doc(current_user["user_id"], {"image_url": secure_url})
     set_user_doc(current_user["user_id"], {"image_url": secure_url})
 

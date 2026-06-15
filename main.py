@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 from routers import auth, users, appointments, calls, scans, admin, analytics, xai, reviews
@@ -40,6 +41,18 @@ app.include_router(admin.router)               # /admin/*
 app.include_router(analytics.router)           # /analytics/*
 app.include_router(xai.router)                 # /xai/*
 app.include_router(reviews.router)             # /reviews/*
+
+
+@app.exception_handler(Exception)
+async def _global_exception_handler(request: Request, exc: Exception):
+    """Catch-all: always return JSON so the mobile client can parse the error."""
+    from fastapi import HTTPException
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error. Please try again."},
+    )
 
 
 @app.on_event("startup")
