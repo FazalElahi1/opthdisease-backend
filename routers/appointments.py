@@ -31,11 +31,20 @@ def can_join_call(slot_date: str, start_time: str, end_time: str) -> bool:
 
 
 def appointment_to_response(doc: dict) -> AppointmentResponse:
+    # Normalise field names — old docs used slot_start/slot_end
+    slot_start = doc.get("slot_start_time") or doc.get("slot_start", "00:00")
+    slot_end   = doc.get("slot_end_time")   or doc.get("slot_end",   "00:00")
     joinable = (
-        doc["status"] in (AppointmentStatus.CONFIRMED, AppointmentStatus.ACTIVE)
-        and can_join_call(doc["slot_date"], doc["slot_start_time"], doc["slot_end_time"])
+        doc.get("status") in (AppointmentStatus.CONFIRMED, AppointmentStatus.ACTIVE)
+        and can_join_call(doc.get("slot_date", ""), slot_start, slot_end)
     )
-    return AppointmentResponse(**{**doc, "can_join": joinable})
+    return AppointmentResponse(**{
+        **doc,
+        "slot_start_time": slot_start,
+        "slot_end_time":   slot_end,
+        "channel_name":    doc.get("channel_name") or doc.get("appointment_id", ""),
+        "can_join":        joinable,
+    })
 
 
 # ── Save FCM token ─────────────────────────────────────────────────────────────

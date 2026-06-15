@@ -73,6 +73,7 @@ col("users").document(PATIENT_ID).set({
     "role":          "patient",
     "age":           28,
     "is_active":     True,
+    "is_verified":   True,
     "auth_method":   "email",
     "password_hash": PW_HASH,
     "created_at":    NOW,
@@ -139,19 +140,20 @@ col("users").document(ADMIN_ID).set({
 # ── Completed appointment (patient ↔ doctor, escrow released) ─────────────────
 print(f"[5/7] Seeding appointment ({APPT_ID}) …")
 col("appointments").document(APPT_ID).set({
-    "appointment_id": APPT_ID,
-    "patient_id":     PATIENT_ID,
-    "patient_name":   "Smoke Patient",
-    "doctor_id":      DOCTOR_ID,
-    "doctor_name":    "Dr. Smoke Test",
-    "slot_date":      "2026-06-13",
-    "slot_start":     "10:00",
-    "slot_end":       "10:30",
-    "price_pkr":      1200,
-    "status":         "completed",
-    "escrow_status":  "released",
-    "completed_at":   TWO_DAYS_AGO,
-    "created_at":     TWO_DAYS_AGO,
+    "appointment_id":  APPT_ID,
+    "patient_id":      PATIENT_ID,
+    "patient_name":    "Smoke Patient",
+    "doctor_id":       DOCTOR_ID,
+    "doctor_name":     "Dr. Smoke Test",
+    "slot_date":       "2026-06-13",
+    "slot_start_time": "10:00",
+    "slot_end_time":   "10:30",
+    "channel_name":    APPT_ID,
+    "price_pkr":       1200,
+    "status":          "completed",
+    "escrow_status":   "released",
+    "completed_at":    TWO_DAYS_AGO,
+    "created_at":      TWO_DAYS_AGO,
 }, merge=True)
 
 # ── Payout request from doctor_smoke ──────────────────────────────────────────
