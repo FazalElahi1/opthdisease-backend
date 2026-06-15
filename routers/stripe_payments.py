@@ -108,7 +108,13 @@ async def create_session(
 
     fee_pkr = resolve_fee(doctor_doc, body.slot_start_time)
     if fee_pkr <= 0:
-        raise HTTPException(status_code=400, detail="Could not determine price for this slot. Please try again.")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{doctor_doc.get('name', 'This doctor')} has not set a consultation fee yet. "
+                "Please ask the doctor to complete their profile, or choose a different time slot."
+            ),
+        )
 
     doctor_name  = doctor_doc.get("name", "Doctor")
     slot_summary = f"{body.slot_date} {body.slot_start_time}-{body.slot_end_time}"

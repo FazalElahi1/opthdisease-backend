@@ -111,7 +111,8 @@ async def get_doctor_profile(current_user: dict = Depends(get_current_user)):
     doc = get_doctor_doc(current_user["user_id"])
     if not doc:
         raise HTTPException(status_code=404, detail="Doctor profile not found.")
-    return DoctorProfile(**{**doc, "user_id": current_user["user_id"]})
+    return DoctorProfile(**{**doc, "user_id": current_user["user_id"],
+                            "is_verified": doc.get("license_status") == "verified"})
 
 
 @router.patch("/doctor-profile", response_model=DoctorProfile)
@@ -140,7 +141,8 @@ async def update_doctor_profile(
     if user_updates:
         set_user_doc(current_user["user_id"], user_updates)
     doc = get_doctor_doc(current_user["user_id"])
-    return DoctorProfile(**{**doc, "user_id": current_user["user_id"]})
+    return DoctorProfile(**{**doc, "user_id": current_user["user_id"],
+                            "is_verified": doc.get("license_status") == "verified"})
 
 
 @router.post("/doctor-profile/image")
