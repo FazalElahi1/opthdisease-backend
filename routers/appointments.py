@@ -208,6 +208,12 @@ async def book_appointment(
     }
     _col(COL_APPOINTMENTS).document(appointment_id).set(appt_doc)
 
+    # Mark payment session consumed so it cannot book a second appointment
+    _col(COL_PAYMENT_SESSIONS).document(body.safepay_token).update({
+        "status":         "booked",
+        "appointment_id": appointment_id,
+    })
+
     # 5. Notify doctor
     await send_push_notification(
         user_id = body.doctor_id,

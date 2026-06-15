@@ -194,7 +194,8 @@ async def create_session(
         "token":        txn_ref,
         "checkout_url": checkout["checkout_url"],
         "amount_pkr":   fee_pkr,
-        "currency":     "PKR",
+        "currency":     stripe_svc.STRIPE_CURRENCY.upper(),  # driven by STRIPE_CURRENCY env var
+        # "currency":   "USD",                               # rollback: set STRIPE_CURRENCY=usd on Render
         "doctor_name":  doctor_name,
         "slot_summary": slot_summary,
         "release_at":   release_at,
