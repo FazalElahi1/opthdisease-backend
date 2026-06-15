@@ -18,6 +18,7 @@ from services.firebase import (
 
 # Doctor fields that must NEVER be exposed to patients.
 _DOCTOR_PRIVATE_FIELDS = ("password_hash", "session_token", "phone", "phoneNumber",
+                          "payout_account_holder", "payout_bank_name", "payout_account_number",
                           "jazzcash_number", "jazzcash_name", "fcm_token", "email")
 
 

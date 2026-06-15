@@ -18,11 +18,9 @@ services:
       - key: ML_SERVICE_URL
         value: https://fazal17-opthdiseaseml.hf.space
       - key: APP_BASE_URL
-        value: https://opthdisease-backend.onrender.com   # update if Render appends a name suffix
-      - key: JAZZCASH_MERCHANT_ID
-        value: MC787133
-      - key: JAZZCASH_ENV
-        value: sandbox
+        value: https://opthdisease-backend.onrender.com   # update if Render appends a name suffix; Stripe success/cancel URLs are built from it
+      - key: STRIPE_CURRENCY
+        value: pkr               # use "pkr" only if your Stripe test account accepts PKR presentment
       - key: ADMIN_EMAIL
         value: f.elahi1767@gmail.com
       - key: GMAIL_USER
@@ -44,10 +42,8 @@ services:
         sync: false
       - key: AGORA_APP_CERTIFICATE
         sync: false
-      - key: JAZZCASH_PASSWORD
-        sync: false
-      - key: JAZZCASH_INTEGRITY_SALT
-        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false              # sk_test_… from your Stripe dashboard
       - key: GEMINI_API_KEY
         sync: false
       - key: CLOUDINARY_API_KEY

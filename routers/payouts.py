@@ -1,16 +1,18 @@
 """
-jazzcash_payouts.py
-==================
-Doctor earnings dashboard + payout REQUESTS (replaces safepay_payouts.py).
+payouts.py
+==========
+Doctor earnings dashboard + manual payout REQUESTS.
 
-JazzCash sandbox has no self-service disbursement API for these merchant
-credentials, so there is NO automated money-out here. Instead:
+There is NO automated money-out API (Stripe does not operate in Pakistan, so it
+cannot pay out to PK banks/wallets). Instead payouts are manual:
 
   1. Escrow releases funds automatically after the cooling period with no
      complaint (services/escrow.py) → appointment.escrow_status = "released".
-  2. The doctor sees released funds as "available" and submits a payout REQUEST.
-  3. An admin transfers the money to the doctor's JazzCash number out-of-band
-     and marks the request "paid" (routers/admin.py → /admin/payouts/{id}/mark-paid).
+  2. The doctor saves a payout account (where to send the money) and submits a
+     payout REQUEST.
+  3. An admin transfers the money to the doctor's account out-of-band and marks
+     the request "paid" (routers/admin.py → /admin/payouts/{id}/mark-paid). The
+     doctor's account details are surfaced to the admin there.
 
 Available balance = released earnings − (requested + paid payout amounts), so a
 doctor can never request the same funds twice.
@@ -51,20 +53,14 @@ def require_doctor(current_user: dict = Depends(get_current_user)) -> dict:
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
-class SaveBankRequest(BaseModel):
-    account_name:    str
-    jazzcash_number: str
+class SaveAccountRequest(BaseModel):
+    account_holder: str   # name on the account
+    bank_name:      str   # bank or wallet provider, e.g. "Meezan Bank", "Easypaisa"
+    account_number: str   # IBAN / account number / wallet number
 
 
 class WithdrawRequest(BaseModel):
     amount_pkr: int
-
-
-def _normalise_jazzcash_number(raw: str) -> str:
-    digits = "".join(ch for ch in raw if ch.isdigit())
-    if digits.startswith("92") and len(digits) == 12:
-        digits = "0" + digits[2:]
-    return digits
 
 
 # ── Earnings computation ────────────────────────────────────────────────────────
@@ -117,45 +113,49 @@ def _compute_balance(doctor_id: str) -> dict:
     }
 
 
-# ── JazzCash account setup ────────────────────────────────────────────────────
+# ── Payout account setup ──────────────────────────────────────────────────────
 
 @router.post("/bank/save")
-async def save_bank_account(body: SaveBankRequest, doctor: dict = Depends(require_doctor)):
-    number = _normalise_jazzcash_number(body.jazzcash_number)
-    if len(number) != 11 or not number.startswith("03"):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid JazzCash number. Enter an 11-digit mobile number starting with 03. "
-                   "Example: 03001234567",
-        )
-    if not body.account_name.strip():
+async def save_payout_account(body: SaveAccountRequest, doctor: dict = Depends(require_doctor)):
+    holder = body.account_holder.strip()
+    bank   = body.bank_name.strip()
+    number = body.account_number.strip()
+
+    if not holder:
         raise HTTPException(status_code=400, detail="Please enter the account holder name.")
+    if not bank:
+        raise HTTPException(status_code=400, detail="Please enter your bank or wallet name.")
+    if len(number) < 5:
+        raise HTTPException(status_code=400, detail="Please enter a valid account or wallet number.")
 
     set_doctor_doc(doctor["user_id"], {
-        "jazzcash_number":   number,
-        "jazzcash_name":     body.account_name.strip(),
-        "jazzcash_saved_at": datetime.now(timezone.utc).isoformat(),
+        "payout_account_holder": holder,
+        "payout_bank_name":      bank,
+        "payout_account_number": number,
+        "payout_saved_at":       datetime.now(timezone.utc).isoformat(),
     })
-    logger.info("Doctor %s linked JazzCash account ending %s", doctor["user_id"], number[-4:])
+    logger.info("Doctor %s saved payout account ending %s", doctor["user_id"], number[-4:])
     return {
-        "success":         True,
-        "message":         "Your JazzCash account has been saved.",
-        "account_name":    body.account_name.strip(),
-        "jazzcash_number": number,
-        "number_last4":    number[-4:],
+        "success":        True,
+        "message":        "Your payout account has been saved.",
+        "account_holder": holder,
+        "bank_name":      bank,
+        "account_number": number,
+        "account_last4":  number[-4:],
     }
 
 
 @router.get("/bank/status")
-async def bank_status(doctor: dict = Depends(require_doctor)):
+async def account_status(doctor: dict = Depends(require_doctor)):
     doctor_doc = get_doctor_doc(doctor["user_id"]) or {}
-    number     = doctor_doc.get("jazzcash_number")
+    number     = doctor_doc.get("payout_account_number")
     return {
-        "connected":       bool(number),
-        "jazzcash_number": number,
-        "number_last4":    number[-4:] if number else None,
-        "account_name":    doctor_doc.get("jazzcash_name"),
-        "message":         "JazzCash account connected." if number else "Please add your JazzCash account to withdraw.",
+        "connected":      bool(number),
+        "account_holder": doctor_doc.get("payout_account_holder"),
+        "bank_name":      doctor_doc.get("payout_bank_name"),
+        "account_number": number,
+        "account_last4":  number[-4:] if number else None,
+        "message":        "Payout account connected." if number else "Please add a payout account to withdraw.",
     }
 
 
@@ -165,7 +165,7 @@ async def bank_status(doctor: dict = Depends(require_doctor)):
 async def get_balance(doctor: dict = Depends(require_doctor)):
     doctor_doc = get_doctor_doc(doctor["user_id"]) or {}
     bal = _compute_balance(doctor["user_id"])
-    bal["bank_connected"] = bool(doctor_doc.get("jazzcash_number"))
+    bal["bank_connected"] = bool(doctor_doc.get("payout_account_number"))
     bal["platform_fee_pkr"] = 0
     bal["net_earnings_pkr"] = bal["gross_earnings_pkr"]
     return bal
@@ -178,11 +178,12 @@ async def request_payout(body: WithdrawRequest, doctor: dict = Depends(require_d
     if body.amount_pkr < MIN_PAYOUT_PKR:
         raise HTTPException(status_code=400, detail=f"Minimum payout is PKR {MIN_PAYOUT_PKR}.")
 
-    doctor_doc   = get_doctor_doc(doctor["user_id"]) or {}
-    number       = doctor_doc.get("jazzcash_number")
-    account_name = doctor_doc.get("jazzcash_name", doctor.get("name", "Doctor"))
+    doctor_doc = get_doctor_doc(doctor["user_id"]) or {}
+    number     = doctor_doc.get("payout_account_number")
+    bank       = doctor_doc.get("payout_bank_name", "")
+    holder     = doctor_doc.get("payout_account_holder", doctor.get("name", "Doctor"))
     if not number:
-        raise HTTPException(status_code=400, detail="Please add your JazzCash account first before withdrawing.")
+        raise HTTPException(status_code=400, detail="Please add a payout account first before withdrawing.")
 
     available = _compute_balance(doctor["user_id"])["available_pkr"]
     if body.amount_pkr > available:
@@ -193,14 +194,15 @@ async def request_payout(body: WithdrawRequest, doctor: dict = Depends(require_d
 
     now = datetime.now(timezone.utc).isoformat()
     payout_ref = _col(COL_PAYOUTS).add({
-        "doctor_id":       doctor["user_id"],
-        "doctor_name":     doctor.get("name", ""),
-        "amount_pkr":      body.amount_pkr,
-        "account_name":    account_name,
-        "jazzcash_number": number,
-        "number_last4":    number[-4:],
-        "status":          "requested",
-        "created_at":      now,
+        "doctor_id":      doctor["user_id"],
+        "doctor_name":    doctor.get("name", ""),
+        "amount_pkr":     body.amount_pkr,
+        "account_holder": holder,
+        "bank_name":      bank,
+        "account_number": number,
+        "account_last4":  number[-4:],
+        "status":         "requested",
+        "created_at":     now,
     })
     payout_id = payout_ref[1].id if isinstance(payout_ref, tuple) else payout_ref.id
 
@@ -210,20 +212,21 @@ async def request_payout(body: WithdrawRequest, doctor: dict = Depends(require_d
             await send_push_notification(
                 user_id = admin_doc.id,
                 title   = "Payout Requested",
-                body    = f"Dr. {doctor.get('name', '')} requested PKR {body.amount_pkr:,} to JazzCash {number}.",
+                body    = f"Dr. {doctor.get('name', '')} requested PKR {body.amount_pkr:,} to {bank} {number}.",
                 data    = {"type": "payout_requested", "payout_id": payout_id},
             )
     except Exception as e:
         logger.error("Failed to notify admins of payout request: %s", e)
 
     return {
-        "message":         "Payout requested. An admin will transfer the funds to your JazzCash account shortly.",
-        "payout_id":       payout_id,
-        "amount_pkr":      body.amount_pkr,
-        "account_name":    account_name,
-        "jazzcash_number": number,
-        "number_last4":    number[-4:],
-        "status":          "requested",
+        "message":        "Payout requested. An admin will transfer the funds to your account shortly.",
+        "payout_id":      payout_id,
+        "amount_pkr":     body.amount_pkr,
+        "account_holder": holder,
+        "bank_name":      bank,
+        "account_number": number,
+        "account_last4":  number[-4:],
+        "status":         "requested",
     }
 
 

@@ -3,7 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from routers import auth, users, appointments, calls, scans, admin, analytics, xai, reviews
-from routers import jazzcash_payments, jazzcash_payouts
+from routers import stripe_payments, payouts
+# JazzCash payments replaced by Stripe Hosted Checkout. Files kept for rollback:
+# from routers import jazzcash_payments
 from services.firebase import get_firebase_app
 from services.escrow import start_scheduler
 from services.ratings import start_rating_scheduler
@@ -30,8 +32,8 @@ app.add_middleware(
 app.include_router(auth.router)                # /auth/*
 app.include_router(users.router)               # /users/*
 app.include_router(appointments.router)        # /appointments/*
-app.include_router(jazzcash_payments.router)   # /jazzcash/*  (real JazzCash sandbox)
-app.include_router(jazzcash_payouts.router)    # /payouts/*
+app.include_router(stripe_payments.router)     # /stripe/*   (Stripe Hosted Checkout)
+app.include_router(payouts.router)             # /payouts/*  (doctor earnings + manual payouts)
 app.include_router(calls.router)               # /calls/*
 app.include_router(scans.router)               # /scans/*
 app.include_router(admin.router)               # /admin/*

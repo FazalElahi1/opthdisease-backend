@@ -458,8 +458,8 @@ async def list_all_payouts(admin: dict = Depends(get_admin_user)):
 
 
 # ── Mark a payout request as paid (manual disbursement) ─────────────────────────
-# JazzCash sandbox has no self-service disbursement API, so the admin transfers
-# the money to the doctor's JazzCash number out-of-band and records it here.
+# There is no automated disbursement API, so the admin transfers the money to the
+# doctor's payout account out-of-band and records it here.
 
 @router.post("/payouts/{payout_id}/mark-paid")
 async def mark_payout_paid(payout_id: str, admin: dict = Depends(get_admin_user)):
@@ -485,8 +485,9 @@ async def mark_payout_paid(payout_id: str, admin: dict = Depends(get_admin_user)
         await send_push_notification(
             user_id = doctor_id,
             title   = "Payout Sent",
-            body    = f"PKR {payout.get('amount_pkr', 0):,} has been transferred to your JazzCash account "
-                      f"{payout.get('jazzcash_number', '')}.",
+            body    = f"PKR {payout.get('amount_pkr', 0):,} has been transferred to your "
+                      f"{payout.get('bank_name', 'payout')} account "
+                      f"{payout.get('account_number', '')}.",
             data    = {"type": "payout_paid", "payout_id": payout_id},
         )
 
