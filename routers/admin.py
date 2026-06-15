@@ -746,6 +746,102 @@ async def list_complaints(
     return {"complaints": complaints, "total": len(complaints)}
 
 
+class PayDoctorRequest(BaseModel):
+    doctor_id:  str
+    amount_pkr: int
+
+
+@router.get("/doctors/payable")
+async def list_payable_doctors(admin: dict = Depends(get_admin_user)):
+    """List verified doctors with available balance and a saved payout account."""
+    from routers.payouts import _compute_balance
+    docs   = _col(COL_DOCTORS).stream()
+    result = []
+    for doc in docs:
+        d = doc.to_dict()
+        if not d.get("payout_account_number"):
+            continue
+        bal = _compute_balance(doc.id)
+        if bal["available_pkr"] <= 0:
+            continue
+        number = d.get("payout_account_number", "")
+        result.append({
+            "doctor_id":      doc.id,
+            "doctor_name":    d.get("name", ""),
+            "bank_name":      d.get("payout_bank_name", ""),
+            "account_number": number,
+            "account_holder": d.get("payout_account_holder", ""),
+            "account_last4":  number[-4:] if number else "",
+            "available_pkr":  bal["available_pkr"],
+        })
+    result.sort(key=lambda d: d["available_pkr"], reverse=True)
+    return {"doctors": result, "total": len(result)}
+
+
+@router.post("/payouts/pay-doctor")
+async def pay_doctor_directly(body: PayDoctorRequest, admin: dict = Depends(get_admin_user)):
+    """Admin initiates and immediately marks a payout as paid — no doctor request needed."""
+    from routers.payouts import _compute_balance
+
+    doctor_doc = get_doctor_doc(body.doctor_id)
+    if not doctor_doc:
+        raise HTTPException(status_code=404, detail="Doctor not found.")
+
+    number = doctor_doc.get("payout_account_number")
+    if not number:
+        raise HTTPException(status_code=400, detail="Doctor has no payout account saved.")
+
+    if body.amount_pkr < 1:
+        raise HTTPException(status_code=400, detail="Amount must be at least PKR 1.")
+
+    bal = _compute_balance(body.doctor_id)
+    if body.amount_pkr > bal["available_pkr"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient available balance. Available: PKR {bal['available_pkr']:,}.",
+        )
+
+    now    = datetime.now(timezone.utc).isoformat()
+    bank   = doctor_doc.get("payout_bank_name", "")
+    holder = doctor_doc.get("payout_account_holder", doctor_doc.get("name", "Doctor"))
+
+    payout_ref = _col(COL_PAYOUTS).add({
+        "doctor_id":      body.doctor_id,
+        "doctor_name":    doctor_doc.get("name", ""),
+        "amount_pkr":     body.amount_pkr,
+        "account_holder": holder,
+        "bank_name":      bank,
+        "account_number": number,
+        "account_last4":  number[-4:],
+        "status":         "paid",
+        "created_at":     now,
+        "paid_at":        now,
+        "paid_by":        admin["user_id"],
+        "initiated_by":   "admin",
+    })
+    payout_id = payout_ref[1].id if isinstance(payout_ref, tuple) else payout_ref.id
+
+    set_doctor_doc(body.doctor_id, {
+        "total_withdrawn_pkr": doctor_doc.get("total_withdrawn_pkr", 0) + body.amount_pkr,
+        "last_withdrawal_at":  now,
+    })
+
+    await send_push_notification(
+        user_id = body.doctor_id,
+        title   = "Payout Sent",
+        body    = f"PKR {body.amount_pkr:,} has been transferred to your {bank} account {number}.",
+        data    = {"type": "payout_paid", "payout_id": payout_id},
+    )
+
+    return {
+        "success":    True,
+        "payout_id":  payout_id,
+        "amount_pkr": body.amount_pkr,
+        "status":     "paid",
+        "paid_at":    now,
+    }
+
+
 class ResolveComplaintRequest(BaseModel):
     resolution:   str            # "refunded", "dismissed"
     notes:        Optional[str] = None
