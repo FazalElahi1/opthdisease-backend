@@ -1,23 +1,19 @@
 """
-seed_test.py
-============
-Seeds Firestore with minimal test data so you can verify all 4 fixed issues
-without waiting for real user activity.
+seed_test.py — creates deterministic test data in Firestore.
 
-Run (from the backend root, with FIREBASE_CREDENTIALS_JSON set):
+Run from the backend root:
   python scripts/seed_test.py
 
-What it creates:
-  • A "patient_test" user  (role=patient,  email=patient_test@eye.local)
-  • A "doctor_test"  user  (role=doctor,   email=doctor_test@eye.local)
-  • A completed appointment between them (status=completed, escrow_status=released)
-  • A payout request from doctor_test (so admin can see it in the payouts tab)
-  • A scan doc (so we can test the payment-gate on /xai/scan/{id}/share)
-
-After seeding, run smoke_test.py to hit the live API and verify each endpoint.
+Creates:
+  • patient_smoke   (role=patient, email=patient_smoke@test.local, pw=SmokePa$$1)
+  • doctor_smoke    (role=doctor,  email=doctor_smoke@test.local,  pw=SmokePa$$1)
+  • admin_smoke     (role=admin,   email=admin_smoke@test.local,   pw=SmokePa$$1)
+  • a completed appointment between patient and doctor (escrow released)
+  • a payout request from doctor_smoke
+  • a scan belonging to patient_smoke (for payment-gate test)
 """
 
-import os, json, sys
+import os, sys
 from datetime import datetime, timezone, timedelta
 
 # ── Firebase Admin ────────────────────────────────────────────────────────────
@@ -27,142 +23,177 @@ try:
 except ImportError:
     sys.exit("pip install firebase-admin")
 
-creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON", "")
-if not creds_json:
-    # fall back to local file
-    cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "firebase-credentials.json")
-    cred = credentials.Certificate(cred_path)
-else:
-    cred = credentials.Certificate(json.loads(creds_json))
-
+cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH",
+                       os.path.join(os.path.dirname(__file__), "..", "firebase-credentials.json"))
+cred = credentials.Certificate(os.path.abspath(cred_path))
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
-
 db = firestore.client()
 
-# ── Config ────────────────────────────────────────────────────────────────────
-APP_ROOT = os.getenv("FIRESTORE_APP_ROOT", "opthdisease")
+# ── bcrypt password hashing (same as the backend) ─────────────────────────────
+try:
+    from passlib.context import CryptContext
+except ImportError:
+    sys.exit("pip install passlib[bcrypt]")
 
-def col(name: str):
-    return db.collection(f"{APP_ROOT}/{name}")
+_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-NOW      = datetime.now(timezone.utc).isoformat()
+def hash_pw(plain: str) -> str:
+    return _pwd_ctx.hash(plain)
+
+# ── Firestore helpers — MUST match services/firebase.py _col() ───────────────
+# Actual path: db.document("app_data/meta").collection("<sub>")
+def col(sub: str):
+    return db.document("app_data/meta").collection(sub)
+
+# ── IDs & credentials ─────────────────────────────────────────────────────────
+NOW          = datetime.now(timezone.utc).isoformat()
 TWO_DAYS_AGO = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
 
-PATIENT_ID  = "seed_patient_test"
-DOCTOR_ID   = "seed_doctor_test"
-APPT_ID     = "seed_appt_completed_001"
-PAYOUT_ID   = "seed_payout_001"
-SCAN_ID     = f"{PATIENT_ID}_1700000000"
+PATIENT_ID   = "smoke_patient_001"
+DOCTOR_ID    = "smoke_doctor_001"
+DOCTOR2_ID   = "smoke_doctor_002"   # second doctor — no appointment with patient (for payment-gate test)
+ADMIN_ID     = "smoke_admin_001"
+APPT_ID      = "smoke_appt_001"
+PAYOUT_ID    = "smoke_payout_001"
+SCAN_ID      = f"{PATIENT_ID}_1700000000"
 
-# ── Seed users ─────────────────────────────────────────────────────────────────
+TEST_PW      = "SmokePa$$1"
+PW_HASH      = hash_pw(TEST_PW)
 
-print("Seeding patient user …")
+print("Using Firestore collection path: app_data/meta/<sub>")
+print()
+
+# ── Patient ───────────────────────────────────────────────────────────────────
+print(f"[1/6] Seeding patient  ({PATIENT_ID}) …")
 col("users").document(PATIENT_ID).set({
-    "user_id":      PATIENT_ID,
-    "email":        "patient_test@eye.local",
-    "name":         "Test Patient",
-    "role":         "patient",
-    "age":          30,
-    "is_active":    True,
-    "created_at":   NOW,
+    "user_id":       PATIENT_ID,
+    "email":         "smoke.patient001@gmail.com",
+    "name":          "Smoke Patient",
+    "role":          "patient",
+    "age":           28,
+    "is_active":     True,
+    "auth_method":   "email",
+    "password_hash": PW_HASH,
+    "created_at":    NOW,
+    "session_token": "smoke_session_patient",
 }, merge=True)
 
-print("Seeding doctor user …")
-col("users").document(DOCTOR_ID).set({
+# ── Doctor ────────────────────────────────────────────────────────────────────
+print(f"[2/6] Seeding doctor   ({DOCTOR_ID}) …")
+doctor_data = {
     "user_id":            DOCTOR_ID,
-    "email":              "doctor_test@eye.local",
-    "name":               "Dr. Test Doctor",
+    "email":              "smoke.doctor001@gmail.com",
+    "name":               "Dr. Smoke Test",
     "role":               "doctor",
     "specialties":        ["Ophthalmology"],
-    "experience_years":   5,
-    "price":              1500,
+    "experience_years":   4,
+    "price":              1200,
     "license_status":     "verified",
     "is_active":          True,
+    "auth_method":        "email",
+    "password_hash":      PW_HASH,
     "created_at":         NOW,
-    # payout account (so /payouts/bank/status works)
-    "payout_account_holder": "Dr. Test Doctor",
-    "payout_bank_name":      "Meezan Bank",
-    "payout_account_number": "PK12MEZN0001234567890101",
+    "session_token":      "smoke_session_doctor",
+    "payout_account_holder": "Dr. Smoke Test",
+    "payout_bank_name":      "HBL",
+    "payout_account_number": "PK36HABB0000049501279101",
     "payout_saved_at":       NOW,
+}
+col("users").document(DOCTOR_ID).set(doctor_data, merge=True)
+col("doctors").document(DOCTOR_ID).set(doctor_data, merge=True)
+
+# ── Doctor 2 (no appointment with patient — used for payment-gate 402 test) ───
+print(f"[3/7] Seeding doctor2  ({DOCTOR2_ID}) …")
+doctor2_data = {
+    "user_id":        DOCTOR2_ID,
+    "email":          "smoke.doctor002@gmail.com",
+    "name":           "Dr. Smoke Two",
+    "role":           "doctor",
+    "specialties":    ["Ophthalmology"],
+    "price":          1000,
+    "license_status": "verified",
+    "is_active":      True,
+    "auth_method":    "email",
+    "password_hash":  PW_HASH,
+    "created_at":     NOW,
+    "session_token":  "smoke_session_doctor2",
+}
+col("users").document(DOCTOR2_ID).set(doctor2_data, merge=True)
+col("doctors").document(DOCTOR2_ID).set(doctor2_data, merge=True)
+
+# ── Admin (role=admin — backend gate: role=="admin" OR email in ADMIN_EMAILS) ─
+print(f"[4/7] Seeding admin    ({ADMIN_ID}) …")
+col("users").document(ADMIN_ID).set({
+    "user_id":       ADMIN_ID,
+    "email":         "smoke.admin001@gmail.com",
+    "name":          "Smoke Admin",
+    "role":          "admin",
+    "is_active":     True,
+    "auth_method":   "email",
+    "password_hash": PW_HASH,
+    "created_at":    NOW,
+    "session_token": "smoke_session_admin",
 }, merge=True)
 
-col("doctors").document(DOCTOR_ID).set({
-    "user_id":            DOCTOR_ID,
-    "email":              "doctor_test@eye.local",
-    "name":               "Dr. Test Doctor",
-    "role":               "doctor",
-    "specialties":        ["Ophthalmology"],
-    "experience_years":   5,
-    "price":              1500,
-    "license_status":     "verified",
-    "is_active":          True,
-    "payout_account_holder": "Dr. Test Doctor",
-    "payout_bank_name":      "Meezan Bank",
-    "payout_account_number": "PK12MEZN0001234567890101",
-    "payout_saved_at":       NOW,
-}, merge=True)
-
-# ── Seed completed appointment ─────────────────────────────────────────────────
-
-print("Seeding completed appointment …")
+# ── Completed appointment (patient ↔ doctor, escrow released) ─────────────────
+print(f"[5/7] Seeding appointment ({APPT_ID}) …")
 col("appointments").document(APPT_ID).set({
-    "appointment_id":  APPT_ID,
-    "patient_id":      PATIENT_ID,
-    "patient_name":    "Test Patient",
-    "doctor_id":       DOCTOR_ID,
-    "doctor_name":     "Dr. Test Doctor",
-    "slot_date":       "2026-06-13",
-    "slot_start":      "10:00",
-    "slot_end":        "10:30",
-    "price_pkr":       1500,
-    "status":          "completed",
-    "escrow_status":   "released",   # funds available for withdrawal
-    "completed_at":    TWO_DAYS_AGO,
-    "created_at":      TWO_DAYS_AGO,
+    "appointment_id": APPT_ID,
+    "patient_id":     PATIENT_ID,
+    "patient_name":   "Smoke Patient",
+    "doctor_id":      DOCTOR_ID,
+    "doctor_name":    "Dr. Smoke Test",
+    "slot_date":      "2026-06-13",
+    "slot_start":     "10:00",
+    "slot_end":       "10:30",
+    "price_pkr":      1200,
+    "status":         "completed",
+    "escrow_status":  "released",
+    "completed_at":   TWO_DAYS_AGO,
+    "created_at":     TWO_DAYS_AGO,
 }, merge=True)
 
-# ── Seed payout request ────────────────────────────────────────────────────────
-
-print("Seeding payout request …")
+# ── Payout request from doctor_smoke ──────────────────────────────────────────
+print(f"[6/7] Seeding payout   ({PAYOUT_ID}) …")
 col("payouts").document(PAYOUT_ID).set({
     "doctor_id":      DOCTOR_ID,
-    "doctor_name":    "Dr. Test Doctor",
-    "amount_pkr":     1500,
-    "account_holder": "Dr. Test Doctor",
-    "bank_name":      "Meezan Bank",
-    "account_number": "PK12MEZN0001234567890101",
-    "account_last4":  "0101",
+    "doctor_name":    "Dr. Smoke Test",
+    "amount_pkr":     1200,
+    "account_holder": "Dr. Smoke Test",
+    "bank_name":      "HBL",
+    "account_number": "PK36HABB0000049501279101",
+    "account_last4":  "9101",
     "status":         "requested",
     "created_at":     NOW,
 }, merge=True)
 
-# ── Seed scan (for payment-gate test) ─────────────────────────────────────────
-
-print("Seeding scan …")
+# ── Scan belonging to patient_smoke ───────────────────────────────────────────
+print(f"[7/7] Seeding scan     ({SCAN_ID}) …")
 col("scans").document(SCAN_ID).set({
     "id":               SCAN_ID,
     "patientId":        PATIENT_ID,
-    "patientName":      "Test Patient",
+    "patientName":      "Smoke Patient",
     "date":             NOW,
     "riskLevel":        "Low",
-    "findings":         "No significant pathology detected.",
+    "findings":         "No pathology detected.",
     "primaryCondition": "Normal",
-    "confidence":       0.92,
-    "probabilities":    {"Normal": 0.92},
+    "confidence":       0.95,
+    "probabilities":    {"Normal": 0.95},
     "affectedRegions":  [],
-    "recommendation":   "Continue regular check-ups.",
+    "recommendation":   "Regular check-ups recommended.",
     "heatmapBase64":    "",
     "savedAt":          NOW,
 }, merge=True)
 
 print()
 print("=" * 60)
-print("Seed data created. IDs:")
-print(f"  Patient:     {PATIENT_ID}")
-print(f"  Doctor:      {DOCTOR_ID}")
-print(f"  Appointment: {APPT_ID}")
-print(f"  Payout:      {PAYOUT_ID}")
-print(f"  Scan:        {SCAN_ID}")
+print("Seed complete. Test credentials:")
+print(f"  Emails: smoke.patient001@gmail.com / smoke.doctor001@gmail.com / smoke.admin001@gmail.com")
+print(f"  Password:      {TEST_PW}")
+print(f"  Patient ID:    {PATIENT_ID}")
+print(f"  Doctor ID:     {DOCTOR_ID}")
+print(f"  Scan ID:       {SCAN_ID}")
 print()
-print("Next: run  python scripts/smoke_test.py  to verify all endpoints.")
+print("Run smoke test:")
+print("  BASE_URL=https://opthdisease-backend.onrender.com python scripts/smoke_test.py")
