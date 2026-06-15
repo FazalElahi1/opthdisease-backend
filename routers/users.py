@@ -173,8 +173,9 @@ async def upload_doctor_image(
             overwrite=True,
             resource_type="image",
         )
-    except Exception:
-        raise HTTPException(status_code=503, detail="Image upload failed. Please try again.")
+    except Exception as e:
+        print(f"[Cloudinary] upload error: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=503, detail=f"Image upload failed: {e}")
 
     secure_url: str = result["secure_url"]
     set_doctor_doc(current_user["user_id"], {"image_url": secure_url})
