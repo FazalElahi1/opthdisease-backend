@@ -20,6 +20,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
+from google.cloud.firestore_v1.base_query import FieldFilter
 from services.firebase import (
     _col, get_doc, set_doc,
     COL_APPOINTMENTS, COL_REVIEWS, COL_USERS,
@@ -101,7 +102,7 @@ async def submit_review(
     # Prevent duplicate reviews
     existing = (
         _col(COL_REVIEWS)
-        .where("appointment_id", "==", appointment_id)
+        .where(filter=FieldFilter("appointment_id", "==", appointment_id))
         .limit(1)
         .stream()
     )
@@ -160,7 +161,7 @@ async def submit_review(
     # Notify admins so a complaint doesn't sit unseen.
     if is_complaint:
         try:
-            for admin_doc in _col(COL_USERS).where("role", "==", "admin").stream():
+            for admin_doc in _col(COL_USERS).where(filter=FieldFilter("role", "==", "admin")).stream():
                 await send_push_notification(
                     user_id = admin_doc.id,
                     title   = "New Complaint Filed",
@@ -225,7 +226,7 @@ async def get_review(
 
     docs = (
         _col(COL_REVIEWS)
-        .where("appointment_id", "==", appointment_id)
+        .where(filter=FieldFilter("appointment_id", "==", appointment_id))
         .limit(1)
         .stream()
     )
@@ -241,7 +242,7 @@ async def get_doctor_reviews(
     doctor_id:    str,
     current_user: dict = Depends(get_current_user),
 ):
-    docs    = _col(COL_REVIEWS).where("doctor_id", "==", doctor_id).stream()
+    docs    = _col(COL_REVIEWS).where(filter=FieldFilter("doctor_id", "==", doctor_id)).stream()
     reviews = [d.to_dict() for d in docs]
     reviews.sort(key=lambda r: r.get("created_at", ""), reverse=True)
 

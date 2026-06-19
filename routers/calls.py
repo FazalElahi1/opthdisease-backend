@@ -5,7 +5,8 @@ from models.appointment_schemas import (
     JoinCallRequest, CallTokenResponse,
     EndCallRequest, AppointmentStatus,
 )
-from services.firebase import get_doc, set_doc, COL_APPOINTMENTS, COL_PAYMENT_SESSIONS
+from google.cloud.firestore_v1.base_query import FieldFilter
+from services.firebase import get_doc, set_doc, _col, COL_APPOINTMENTS, COL_PAYMENT_SESSIONS
 from services.agora import generate_call_token
 from services.notifications import send_push_notification, get_current_user
 
@@ -99,11 +100,10 @@ async def join_call(
         # Use _col() from firebase directly for the compound where query.
         # Import _col and COL_APPOINTMENTS at top — _col is the internal helper
         # that routes through app_data/meta, so this is namespace-safe.
-        from services.firebase import _col
         active_docs = (
             _col(COL_APPOINTMENTS)
-            .where("doctor_id", "==", appt["doctor_id"])
-            .where("status",    "==", AppointmentStatus.ACTIVE)
+            .where(filter=FieldFilter("doctor_id", "==", appt["doctor_id"]))
+            .where(filter=FieldFilter("status",    "==", AppointmentStatus.ACTIVE))
             .limit(1)
             .stream()
         )

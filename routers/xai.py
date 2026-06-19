@@ -17,6 +17,7 @@ from typing import Optional
 from datetime import datetime, timezone
 from pathlib import Path
 
+from google.cloud.firestore_v1.base_query import FieldFilter
 from services.firebase import (
     _col,
     COL_SCANS,
@@ -288,8 +289,8 @@ async def share_report(
     # with this specific doctor before they can share a scan with them.
     paid_appts = list(
         _col(COL_APPOINTMENTS)
-        .where("patient_id", "==", current_user["user_id"])
-        .where("doctor_id", "==", body.doctor_id)
+        .where(filter=FieldFilter("patient_id", "==", current_user["user_id"]))
+        .where(filter=FieldFilter("doctor_id", "==", body.doctor_id))
         .stream()
     )
     has_paid = any(
@@ -312,7 +313,7 @@ async def share_report(
     # it, the patient can share a new one. We query by patientId only (single
     # equality filter = no composite index needed) and filter in Python, matching
     # the pattern used elsewhere in this codebase.
-    for d in _col(COL_SCANS).where("patientId", "==", current_user["user_id"]).stream():
+    for d in _col(COL_SCANS).where(filter=FieldFilter("patientId", "==", current_user["user_id"])).stream():
         if d.id == scan_id:
             continue  # re-sharing this same scan is allowed
         other = d.to_dict()

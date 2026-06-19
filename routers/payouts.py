@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from google.cloud.firestore_v1.base_query import FieldFilter
 from services.firebase import (
     get_doctor_doc,
     set_doctor_doc,
@@ -68,8 +69,8 @@ class WithdrawRequest(BaseModel):
 def _compute_balance(doctor_id: str) -> dict:
     appt_docs = (
         _col(COL_APPOINTMENTS)
-        .where("doctor_id", "==", doctor_id)
-        .where("status", "==", "completed")
+        .where(filter=FieldFilter("doctor_id", "==", doctor_id))
+        .where(filter=FieldFilter("status", "==", "completed"))
         .stream()
     )
     completed = [a.to_dict() for a in appt_docs]
@@ -108,7 +109,7 @@ def _compute_balance(doctor_id: str) -> dict:
         })
 
     # Funds already claimed by payout requests (requested OR paid) can't be re-requested.
-    payout_docs = _col(COL_PAYOUTS).where("doctor_id", "==", doctor_id).stream()
+    payout_docs = _col(COL_PAYOUTS).where(filter=FieldFilter("doctor_id", "==", doctor_id)).stream()
     payouts = [p.to_dict() for p in payout_docs]
     claimed = sum(p.get("amount_pkr", 0) for p in payouts if p.get("status") in ("requested", "paid"))
     paid    = sum(p.get("amount_pkr", 0) for p in payouts if p.get("status") == "paid")
@@ -222,7 +223,7 @@ async def request_payout(body: WithdrawRequest, doctor: dict = Depends(require_d
 
     # Notify admins that a payout needs to be processed manually.
     try:
-        for admin_doc in _col(COL_USERS).where("role", "==", "admin").stream():
+        for admin_doc in _col(COL_USERS).where(filter=FieldFilter("role", "==", "admin")).stream():
             await send_push_notification(
                 user_id = admin_doc.id,
                 title   = "Payout Requested",
@@ -248,7 +249,7 @@ async def request_payout(body: WithdrawRequest, doctor: dict = Depends(require_d
 
 @router.get("/history")
 async def payout_history(doctor: dict = Depends(require_doctor)):
-    docs    = _col(COL_PAYOUTS).where("doctor_id", "==", doctor["user_id"]).stream()
+    docs    = _col(COL_PAYOUTS).where(filter=FieldFilter("doctor_id", "==", doctor["user_id"])).stream()
     history = []
     for d in docs:
         item = d.to_dict()

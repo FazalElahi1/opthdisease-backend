@@ -24,6 +24,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
+from google.cloud.firestore_v1.base_query import FieldFilter
 from services.firebase import (
     _col, set_doc,
     COL_APPOINTMENTS, COL_USERS,
@@ -51,7 +52,7 @@ def _parse_iso(value) -> datetime | None:
 
 def _admin_user_ids() -> list[str]:
     try:
-        docs = _col(COL_USERS).where("role", "==", "admin").stream()
+        docs = _col(COL_USERS).where(filter=FieldFilter("role", "==", "admin")).stream()
         return [d.id for d in docs]
     except Exception as e:
         logger.error("escrow: could not list admins: %s", e)
@@ -69,8 +70,8 @@ def release_due_escrows() -> int:
     try:
         docs = (
             _col(COL_APPOINTMENTS)
-            .where("status", "==", "completed")
-            .where("escrow_status", "==", "held")
+            .where(filter=FieldFilter("status", "==", "completed"))
+            .where(filter=FieldFilter("escrow_status", "==", "held"))
             .stream()
         )
     except Exception as e:

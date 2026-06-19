@@ -13,6 +13,7 @@ from pydantic import BaseModel
 #       - Drop get_firestore_client — no longer called directly.
 #       - Add _col, COL_SCANS for namespace-safe reads/writes on scans collection.
 #       - Import shared get_current_user from notifications.
+from google.cloud.firestore_v1.base_query import FieldFilter
 from services.firebase import _col, COL_SCANS, get_user_doc
 from services.notifications import get_current_user
 # ── END CHANGE 1 ───────────────────────────────────────────────────────────────
@@ -126,7 +127,7 @@ async def get_my_scans(current_user: dict = Depends(get_current_user)):
     # "Unexpected character: I". Sorting in Python avoids the index entirely.
     docs = (
         _col(COL_SCANS)
-        .where("patientId", "==", current_user["user_id"])
+        .where(filter=FieldFilter("patientId", "==", current_user["user_id"]))
         .stream()
     )
     # ── END CHANGE 4 ───────────────────────────────────────────────────────────
@@ -147,7 +148,7 @@ async def get_assigned_scans(current_user: dict = Depends(get_current_user)):
     #       docs = db.collection("scans").where(...).stream()
     docs = (
         _col(COL_SCANS)
-        .where("assignedDoctorId", "==", current_user["user_id"])
+        .where(filter=FieldFilter("assignedDoctorId", "==", current_user["user_id"]))
         .stream()
     )
     # ── END CHANGE 5 ───────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ from models.appointment_schemas import (
     AppointmentListResponse, AppointmentStatus,
     DoctorSlotsResponse, SaveFCMTokenRequest,
 )
+from google.cloud.firestore_v1.base_query import FieldFilter
 from services.firebase import (
     get_doctor_doc,
     _col, COL_APPOINTMENTS, COL_PAYMENT_SESSIONS,
@@ -88,13 +89,13 @@ async def get_doctor_slots(
 
     booked_query = (
         _col(COL_APPOINTMENTS)
-        .where("doctor_id", "==", doctor_id)
-        .where("slot_date", "==", date)
-        .where("status", "in", [
+        .where(filter=FieldFilter("doctor_id", "==", doctor_id))
+        .where(filter=FieldFilter("slot_date", "==", date))
+        .where(filter=FieldFilter("status", "in", [
             AppointmentStatus.CONFIRMED,
             AppointmentStatus.ACTIVE,
             AppointmentStatus.PENDING,
-        ])
+        ]))
         .stream()
     )
     booked_times = {doc.to_dict()["slot_start_time"] for doc in booked_query}
@@ -160,14 +161,14 @@ async def book_appointment(
     # 2. Race-condition guard — check slot is still available
     conflict = (
         _col(COL_APPOINTMENTS)
-        .where("doctor_id",       "==", body.doctor_id)
-        .where("slot_date",       "==", body.slot_date)
-        .where("slot_start_time", "==", body.slot_start_time)
-        .where("status", "in", [
+        .where(filter=FieldFilter("doctor_id",       "==", body.doctor_id))
+        .where(filter=FieldFilter("slot_date",       "==", body.slot_date))
+        .where(filter=FieldFilter("slot_start_time", "==", body.slot_start_time))
+        .where(filter=FieldFilter("status", "in", [
             AppointmentStatus.CONFIRMED,
             AppointmentStatus.ACTIVE,
             AppointmentStatus.PENDING,
-        ])
+        ]))
         .limit(1)
         .stream()
     )

@@ -28,6 +28,7 @@ from typing import Optional
 
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 import cloudinary
 import cloudinary.uploader
 from dotenv import load_dotenv
@@ -210,7 +211,7 @@ def get_user_by_email(email: str) -> Optional[dict]:
         raise ValueError("email must not be empty")
     docs = (
         _col(COL_USERS)
-        .where("email", "==", email)
+        .where(filter=FieldFilter("email", "==", email))
         .limit(1)
         .stream()
     )
@@ -234,7 +235,7 @@ def get_doctor_by_license(license_number: str) -> Optional[dict]:
         return None
     docs = (
         _col(COL_DOCTORS)
-        .where("license_number_norm", "==", norm)
+        .where(filter=FieldFilter("license_number_norm", "==", norm))
         .limit(1)
         .stream()
     )
@@ -248,7 +249,7 @@ def list_verified_doctors(specialty: Optional[str] = None) -> list[dict]:
     Return all doctors with license_status == 'verified'.
     Optionally filter by specialty (case-insensitive).
     """
-    query = _col(COL_DOCTORS).where("license_status", "==", "verified")
+    query = _col(COL_DOCTORS).where(filter=FieldFilter("license_status", "==", "verified"))
     doctors = []
     for doc in query.stream():
         d = {**doc.to_dict(), "user_id": doc.id}

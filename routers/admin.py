@@ -14,6 +14,7 @@ from pydantic import BaseModel
 #       - Keep decode_access_token for get_admin_user (admin has its own gate,
 #         not the shared get_current_user, so we keep it separate).
 #       - Drop get_firestore_client — no longer called directly.
+from google.cloud.firestore_v1.base_query import FieldFilter
 from services.firebase import (
     _col,
     COL_USERS, COL_DOCTORS, COL_APPOINTMENTS, COL_SCANS,
@@ -522,7 +523,7 @@ async def list_flagged_calls(admin: dict = Depends(get_admin_user)):
     50% of the booked slot duration. Includes booked vs actual duration
     and completion percentage so admin can decide whether to refund.
     """
-    docs  = _col(COL_APPOINTMENTS).where("flagged_short_call", "==", True).stream()
+    docs  = _col(COL_APPOINTMENTS).where(filter=FieldFilter("flagged_short_call", "==", True)).stream()
     calls = []
     for doc in docs:
         a       = doc.to_dict()
@@ -704,7 +705,7 @@ async def list_complaints(
     call duration vs booked duration so admin can make a data-driven refund decision
     without needing to look up the appointment separately.
     """
-    docs = _col(COL_REVIEWS).where("is_complaint", "==", True).stream()
+    docs = _col(COL_REVIEWS).where(filter=FieldFilter("is_complaint", "==", True)).stream()
     complaints = []
     for doc in docs:
         c = doc.to_dict()
@@ -857,8 +858,8 @@ async def resolve_complaint(
     # Find the complaint review
     docs = (
         _col(COL_REVIEWS)
-        .where("appointment_id", "==", appointment_id)
-        .where("is_complaint",   "==", True)
+        .where(filter=FieldFilter("appointment_id", "==", appointment_id))
+        .where(filter=FieldFilter("is_complaint",   "==", True))
         .limit(1)
         .stream()
     )

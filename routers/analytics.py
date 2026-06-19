@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime, timezone
 
+from google.cloud.firestore_v1.base_query import FieldFilter
 from services.firebase import _col, COL_APPOINTMENTS, COL_SCANS
 from services.notifications import get_current_user
 
@@ -12,7 +13,7 @@ async def doctor_analytics(current_user: dict = Depends(get_current_user)):
     if current_user.get("role") != "doctor":
         raise HTTPException(status_code=403, detail="Only doctors can access analytics.")
 
-    docs      = _col(COL_APPOINTMENTS).where("doctor_id", "==", current_user["user_id"]).stream()
+    docs      = _col(COL_APPOINTMENTS).where(filter=FieldFilter("doctor_id", "==", current_user["user_id"])).stream()
     all_appts = [doc.to_dict() for doc in docs]
 
     completed      = [a for a in all_appts if a.get("status") == "completed"]
@@ -32,7 +33,7 @@ async def doctor_analytics(current_user: dict = Depends(get_current_user)):
         reverse = True,
     )[:5]
 
-    scan_docs      = _col(COL_SCANS).where("assignedDoctorId", "==", current_user["user_id"]).stream()
+    scan_docs      = _col(COL_SCANS).where(filter=FieldFilter("assignedDoctorId", "==", current_user["user_id"])).stream()
     scans          = [doc.to_dict() for doc in scan_docs]
     reviewed_count = sum(1 for s in scans if s.get("review"))
 
@@ -54,7 +55,7 @@ async def patient_analytics(current_user: dict = Depends(get_current_user)):
     if current_user.get("role") != "patient":
         raise HTTPException(status_code=403, detail="Only patients can access this.")
 
-    scan_docs = _col(COL_SCANS).where("patientId", "==", current_user["user_id"]).stream()
+    scan_docs = _col(COL_SCANS).where(filter=FieldFilter("patientId", "==", current_user["user_id"])).stream()
     scans     = [doc.to_dict() for doc in scan_docs]
 
     risk_counts: dict = {}
@@ -62,7 +63,7 @@ async def patient_analytics(current_user: dict = Depends(get_current_user)):
         r = s.get("riskLevel", "Unknown")
         risk_counts[r] = risk_counts.get(r, 0) + 1
 
-    appt_docs = _col(COL_APPOINTMENTS).where("patient_id", "==", current_user["user_id"]).stream()
+    appt_docs = _col(COL_APPOINTMENTS).where(filter=FieldFilter("patient_id", "==", current_user["user_id"])).stream()
     appts     = [doc.to_dict() for doc in appt_docs]
 
     total_spent             = sum(a.get("price_pkr", 0) for a in appts if a.get("status") == "completed")

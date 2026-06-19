@@ -9,6 +9,7 @@ from models.schemas import (
     UpdateProfileRequest, UpdateDoctorProfileRequest,
     UserRole,
 )
+from google.cloud.firestore_v1.base_query import FieldFilter
 from services.firebase import (
     _col, COL_DOCTORS,
     set_user_doc,
@@ -63,7 +64,7 @@ async def list_doctors(
     #       docs  = query.stream()
     #
     # NEW:  _col(COL_DOCTORS) routes through app_data/meta → doctors
-    query = _col(COL_DOCTORS).where("license_status", "==", "verified")
+    query = _col(COL_DOCTORS).where(filter=FieldFilter("license_status", "==", "verified"))
     doctors = []
     for doc in query.stream():
         d = doc.to_dict()
