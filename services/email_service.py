@@ -1,37 +1,32 @@
-import smtplib
 import os
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
 
-GMAIL_USER     = os.getenv("GMAIL_USER", "")       # your Gmail address
-GMAIL_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "") # Gmail App Password (not your login password)
-ADMIN_EMAIL    = os.getenv("ADMIN_EMAIL", "")       # admin email to receive doctor applications
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+ADMIN_EMAIL    = os.getenv("ADMIN_EMAIL", "")
 APP_NAME       = "OpthdiseaseAI"
+FROM_ADDRESS   = f"{APP_NAME} <onboarding@resend.dev>"
 
 
 def _send(to: str, subject: str, html: str) -> bool:
-    """Send an HTML email via Gmail SMTP."""
-    if not GMAIL_USER or not GMAIL_PASSWORD:
-        print(f"[Email] GMAIL credentials not set — skipping email to {to}")
+    """Send an HTML email via Resend HTTP API (SMTP is blocked on Render free tier)."""
+    if not RESEND_API_KEY:
+        print(f"[Email] RESEND_API_KEY not set — skipping email to {to}")
         return False
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = f"{APP_NAME} <{GMAIL_USER}>"
-        msg["To"]      = to
-        msg.attach(MIMEText(html, "html"))
-
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(GMAIL_USER, GMAIL_PASSWORD)
-            server.sendmail(GMAIL_USER, to, msg.as_string())
-        print(f"[Email] Sent '{subject}' to {to}")
-        return True
+        r = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+            json={"from": FROM_ADDRESS, "to": [to], "subject": subject, "html": html},
+            timeout=15,
+        )
+        if r.status_code == 200 or r.status_code == 201:
+            print(f"[Email] Sent '{subject}' to {to}")
+            return True
+        print(f"[Email] Resend error {r.status_code}: {r.text}")
+        return False
     except Exception as e:
         print(f"[Email] Failed to send to {to}: {e}")
         return False

@@ -33,6 +33,7 @@ pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY", "AIzaSyBmkbN1VBW3Z_sXGwddjMhFDZKymWIq0g4")
 GMAIL_USER           = os.getenv("GMAIL_USER", "")
+ADMIN_EMAIL          = os.getenv("ADMIN_EMAIL", "")
 
 async def _firebase_verify_password(email: str, password: str) -> bool:
     """Verify email/password against Firebase Auth REST API (used after a password reset)."""
@@ -516,21 +517,14 @@ async def forgot_password(body: ForgotPasswordRequest):
 
 @router.get("/test-email")
 async def test_email():
-    import smtplib, os
-    gmail_user = os.getenv("GMAIL_USER", "")
-    gmail_pass = os.getenv("GMAIL_APP_PASSWORD", "")
-    if not gmail_user or not gmail_pass:
-        return {"smtp_ok": False, "error": "credentials_missing", "gmail_user_set": bool(gmail_user), "gmail_pass_set": bool(gmail_pass)}
-    try:
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(gmail_user, gmail_pass)
-            server.sendmail(gmail_user, gmail_user, f"Subject: SMTP test\n\nSMTP working from Render.")
-        return {"smtp_ok": True, "sent_to": gmail_user}
-    except Exception as e:
-        return {"smtp_ok": False, "error": str(e), "sent_to": gmail_user}
+    from services.email_service import _send
+    ok = _send(
+        to      = GMAIL_USER or ADMIN_EMAIL,
+        subject = "OpthdiseaseAI — Email delivery test",
+        html    = "<p>Email delivery via Resend is working from Render.</p>",
+    )
+    resend_key_set = bool(os.getenv("RESEND_API_KEY", ""))
+    return {"email_ok": ok, "resend_key_set": resend_key_set, "sent_to": GMAIL_USER or ADMIN_EMAIL}
 
 
 # ── Get current user ───────────────────────────────────────────────────────────
