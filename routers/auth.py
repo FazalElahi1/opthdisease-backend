@@ -173,13 +173,15 @@ async def register(body: RegisterRequest):
             detail=f"Could not create account: {str(e)}",
         )
 
-    # 3. Send email verification for patients
+    # 3. Send email verification for patients (non-blocking — registration succeeds even if email fails)
     if body.role == UserRole.PATIENT:
         try:
             verify_link = firebase_auth.generate_email_verification_link(body.email)
-            send_patient_verification_email(body.email, body.name, verify_link)
-        except Exception:
-            pass
+            sent = send_patient_verification_email(body.email, body.name, verify_link)
+            if not sent:
+                print(f"[Register] Verification email failed to deliver to {body.email}")
+        except Exception as e:
+            print(f"[Register] Could not generate verification link for {body.email}: {e}")
 
     now = datetime.now(timezone.utc).isoformat()
 
@@ -220,24 +222,25 @@ async def register(body: RegisterRequest):
         }
         set_doctor_doc(fb_user.uid, doctor_doc)
 
-        try:
-            send_doctor_application_received(
-                doctor_email   = body.email,
-                doctor_name    = body.name,
-                license_number = body.license_number or "Not provided",
-            )
-            send_admin_new_doctor_application(
-                doctor_name    = body.name,
-                doctor_email   = body.email,
-                license_number = body.license_number or "Not provided",
-                specialties    = body.specialties or [],
-                phone          = body.phone or "",
-                gender         = body.gender or "",
-                experience     = body.experience or 0,
-                description    = body.description or "",
-            )
-        except Exception:
-            pass
+        sent1 = send_doctor_application_received(
+            doctor_email   = body.email,
+            doctor_name    = body.name,
+            license_number = body.license_number or "Not provided",
+        )
+        sent2 = send_admin_new_doctor_application(
+            doctor_name    = body.name,
+            doctor_email   = body.email,
+            license_number = body.license_number or "Not provided",
+            specialties    = body.specialties or [],
+            phone          = body.phone or "",
+            gender         = body.gender or "",
+            experience     = body.experience or 0,
+            description    = body.description or "",
+        )
+        if not sent1:
+            print(f"[Register] Doctor application email failed to deliver to {body.email}")
+        if not sent2:
+            print(f"[Register] Admin notification email failed to deliver to {ADMIN_EMAIL}")
         return build_token_response({**user_doc}, is_new_user=True)
 
     return build_token_response({**user_doc}, is_new_user=True)
@@ -448,10 +451,12 @@ async def resend_verification(email: str):
         return MessageResponse(message="Email is already verified.")
     try:
         verify_link = firebase_auth.generate_email_verification_link(email)
-        send_patient_verification_email(email, user_doc.get("name", ""), verify_link)
-        return MessageResponse(message="Verification email sent. Please check your inbox.")
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not generate verification link. Please try again.")
+    sent = send_patient_verification_email(email, user_doc.get("name", ""), verify_link)
+    if not sent:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not send verification email — mail delivery failed. Please try again later.")
+    return MessageResponse(message="Verification email sent. Please check your inbox.")
 
 
 # ── Check email verification status ───────────────────────────────────────────
