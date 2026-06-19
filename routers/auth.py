@@ -521,15 +521,16 @@ async def forgot_password(body: ForgotPasswordRequest):
 # ── Debug: test email delivery (remove before production) ────────────────────
 
 @router.get("/test-email")
-async def test_email():
+async def test_email(to: str = ""):
     from services.email_service import _send_smtp, _send_resend
-    smtp_ok   = _send_smtp(GMAIL_USER or ADMIN_EMAIL, "OpthdiseaseAI — SMTP test", "<p>SMTP working.</p>")
-    resend_ok = _send_resend(GMAIL_USER or ADMIN_EMAIL, "OpthdiseaseAI — Resend test", "<p>Resend working.</p>") if not smtp_ok else None
+    recipient = to or GMAIL_USER or ADMIN_EMAIL
+    smtp_ok   = _send_smtp(recipient, "OpthdiseaseAI — SMTP test", "<p>SMTP working.</p>")
+    resend_ok = _send_resend(recipient, "OpthdiseaseAI — Resend test", "<p>Resend working.</p>") if not smtp_ok else None
     return {
         "smtp_ok":        smtp_ok,
         "resend_ok":      resend_ok,
         "resend_key_set": bool(os.getenv("RESEND_API_KEY", "")),
-        "sent_to":        GMAIL_USER or ADMIN_EMAIL,
+        "sent_to":        recipient,
     }
 
 
