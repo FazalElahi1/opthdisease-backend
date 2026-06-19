@@ -1,35 +1,69 @@
 import os
+import smtplib
 import httpx
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 
 load_dotenv()
 
+GMAIL_USER     = os.getenv("GMAIL_USER", "")
+GMAIL_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 ADMIN_EMAIL    = os.getenv("ADMIN_EMAIL", "")
 APP_NAME       = "OpthdiseaseAI"
-FROM_ADDRESS   = f"{APP_NAME} <onboarding@resend.dev>"
 
 
-def _send(to: str, subject: str, html: str) -> bool:
-    """Send an HTML email via Resend HTTP API (SMTP is blocked on Render free tier)."""
+def _send_smtp(to: str, subject: str, html: str) -> bool:
+    """Try Gmail SMTP on port 587 (STARTTLS). Works on most Render instances."""
+    if not GMAIL_USER or not GMAIL_PASSWORD:
+        return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = f"{APP_NAME} <{GMAIL_USER}>"
+        msg["To"]      = to
+        msg.attach(MIMEText(html, "html"))
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(GMAIL_USER, GMAIL_PASSWORD)
+            server.sendmail(GMAIL_USER, to, msg.as_string())
+        print(f"[Email/SMTP] Sent '{subject}' to {to}")
+        return True
+    except Exception as e:
+        print(f"[Email/SMTP] Failed: {e}")
+        return False
+
+
+def _send_resend(to: str, subject: str, html: str) -> bool:
+    """Fallback: Resend HTTP API (always works regardless of Render instance)."""
     if not RESEND_API_KEY:
-        print(f"[Email] RESEND_API_KEY not set — skipping email to {to}")
         return False
     try:
         r = httpx.post(
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-            json={"from": FROM_ADDRESS, "to": [to], "subject": subject, "html": html},
+            json={"from": f"{APP_NAME} <onboarding@resend.dev>", "to": [to], "subject": subject, "html": html},
             timeout=15,
         )
-        if r.status_code == 200 or r.status_code == 201:
-            print(f"[Email] Sent '{subject}' to {to}")
+        if r.status_code in (200, 201):
+            print(f"[Email/Resend] Sent '{subject}' to {to}")
             return True
-        print(f"[Email] Resend error {r.status_code}: {r.text}")
+        print(f"[Email/Resend] Error {r.status_code}: {r.text}")
         return False
     except Exception as e:
-        print(f"[Email] Failed to send to {to}: {e}")
+        print(f"[Email/Resend] Failed: {e}")
         return False
+
+
+def _send(to: str, subject: str, html: str) -> bool:
+    """Send email: try SMTP first, fall back to Resend if SMTP is blocked."""
+    if _send_smtp(to, subject, html):
+        return True
+    print(f"[Email] SMTP failed, trying Resend fallback for {to}")
+    return _send_resend(to, subject, html)
 
 
 # ── Doctor registration emails ─────────────────────────────────────────────────
