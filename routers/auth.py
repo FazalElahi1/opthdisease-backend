@@ -3,7 +3,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import auth as firebase_auth
 from passlib.context import CryptContext
 from datetime import datetime, timezone
-import secrets                                     # ← CHANGE 1: new import for session token
+import secrets
+import os
+import httpx
 
 from models.schemas import (
     RegisterRequest, LoginRequest, GoogleSignInRequest,
@@ -28,6 +30,20 @@ from services.notifications import send_push_notification
 router  = APIRouter(prefix="/auth", tags=["Authentication"])
 bearer  = HTTPBearer()
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY", "AIzaSyBmkbN1VBW3Z_sXGwddjMhFDZKymWIq0g4")
+
+async def _firebase_verify_password(email: str, password: str) -> bool:
+    """Verify email/password against Firebase Auth REST API (used after a password reset)."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_WEB_API_KEY}",
+                json={"email": email, "password": password, "returnSecureToken": False},
+            )
+        return r.status_code == 200
+    except Exception:
+        return False
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -253,12 +269,17 @@ async def login(body: LoginRequest):
             detail="This account uses Google Sign-In. Please use the Google button.",
         )
 
-    # 4. Verify password
+    # 4. Verify password — bcrypt first, then Firebase REST fallback for post-reset logins
     if not verify_password(body.password, user_doc.get("password_hash", "")):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password.",
-        )
+        # bcrypt failed — user may have reset via Firebase link; check Firebase Auth
+        firebase_ok = await _firebase_verify_password(body.email, body.password)
+        if not firebase_ok:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect password.",
+            )
+        # Firebase accepted the new password — sync the hash back to Firestore
+        set_user_doc(user_doc["user_id"], {"password_hash": hash_password(body.password)})
 
     # ── CHANGE 4: is_active check ──────────────────────────────────────────────
     # OLD CODE: nothing here — deactivated users could log in freely.

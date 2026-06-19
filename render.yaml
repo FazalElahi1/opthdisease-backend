@@ -25,6 +25,8 @@ services:
         value: f.elahi1767@gmail.com
       - key: GMAIL_USER
         value: f.elahi1767@gmail.com
+      - key: FIREBASE_WEB_API_KEY
+        value: AIzaSyBmkbN1VBW3Z_sXGwddjMhFDZKymWIq0g4
       - key: CLOUDINARY_CLOUD_NAME
         value: dzyjvx2ru
       - key: JWT_ALGORITHM
