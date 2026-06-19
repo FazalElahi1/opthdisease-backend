@@ -522,18 +522,55 @@ async def forgot_password(body: ForgotPasswordRequest):
 
 @router.get("/test-email")
 async def test_email(to: str = ""):
-    from services.email_service import _send_smtp, _send_brevo, _send_resend
-    recipient = to or GMAIL_USER or ADMIN_EMAIL
-    smtp_ok   = _send_smtp(recipient,   "OpthdiseaseAI — SMTP test",   "<p>SMTP working.</p>")
-    brevo_ok  = _send_brevo(recipient,  "OpthdiseaseAI — Brevo test",  "<p>Brevo working.</p>")
-    resend_ok = _send_resend(recipient, "OpthdiseaseAI — Resend test", "<p>Resend working.</p>")
+    import httpx as _httpx, smtplib as _smtp, os as _os
+    recipient    = to or GMAIL_USER or ADMIN_EMAIL
+    gmail_user   = _os.getenv("GMAIL_USER", "")
+    gmail_pass   = _os.getenv("GMAIL_APP_PASSWORD", "")
+    brevo_key    = _os.getenv("BREVO_API_KEY", "")
+    resend_key   = _os.getenv("RESEND_API_KEY", "")
+
+    # SMTP
+    smtp_err = None
+    try:
+        with _smtp.SMTP("smtp.gmail.com", 587, timeout=5) as s:
+            s.ehlo(); s.starttls(); s.ehlo()
+            s.login(gmail_user, gmail_pass)
+            s.sendmail(gmail_user, recipient, "Subject: test\n\ntest")
+        smtp_ok = True
+    except Exception as e:
+        smtp_ok = False; smtp_err = str(e)
+
+    # Brevo
+    brevo_err = None
+    try:
+        r = _httpx.post("https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": brevo_key, "Content-Type": "application/json"},
+            json={"sender": {"name": "OpthdiseaseAI", "email": gmail_user or "noreply@opthdiseaseai.com"},
+                  "to": [{"email": recipient}], "subject": "Brevo test", "htmlContent": "<p>test</p>"},
+            timeout=15)
+        brevo_ok = r.status_code in (200, 201)
+        if not brevo_ok: brevo_err = f"{r.status_code}: {r.text}"
+    except Exception as e:
+        brevo_ok = False; brevo_err = str(e)
+
+    # Resend
+    resend_err = None
+    try:
+        r = _httpx.post("https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+            json={"from": "OpthdiseaseAI <onboarding@resend.dev>", "to": [recipient],
+                  "subject": "Resend test", "html": "<p>test</p>"},
+            timeout=15)
+        resend_ok = r.status_code in (200, 201)
+        if not resend_ok: resend_err = f"{r.status_code}: {r.text}"
+    except Exception as e:
+        resend_ok = False; resend_err = str(e)
+
     return {
-        "smtp_ok":        smtp_ok,
-        "brevo_ok":       brevo_ok,
-        "resend_ok":      resend_ok,
-        "brevo_key_set":  bool(os.getenv("BREVO_API_KEY", "")),
-        "resend_key_set": bool(os.getenv("RESEND_API_KEY", "")),
-        "sent_to":        recipient,
+        "sent_to":    recipient,
+        "smtp":       {"ok": smtp_ok,   "error": smtp_err},
+        "brevo":      {"ok": brevo_ok,  "error": brevo_err,  "key_set": bool(brevo_key)},
+        "resend":     {"ok": resend_ok, "error": resend_err, "key_set": bool(resend_key)},
     }
 
 
