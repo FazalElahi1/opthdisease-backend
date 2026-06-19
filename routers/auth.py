@@ -516,13 +516,21 @@ async def forgot_password(body: ForgotPasswordRequest):
 
 @router.get("/test-email")
 async def test_email():
-    from services.email_service import _send
-    ok = _send(
-        to      = GMAIL_USER,
-        subject = "OpthdiseaseAI — SMTP test",
-        html    = "<p>SMTP is working from Render.</p>",
-    )
-    return {"smtp_ok": ok, "sent_to": GMAIL_USER}
+    import smtplib, os
+    gmail_user = os.getenv("GMAIL_USER", "")
+    gmail_pass = os.getenv("GMAIL_APP_PASSWORD", "")
+    if not gmail_user or not gmail_pass:
+        return {"smtp_ok": False, "error": "credentials_missing", "gmail_user_set": bool(gmail_user), "gmail_pass_set": bool(gmail_pass)}
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(gmail_user, gmail_pass)
+            server.sendmail(gmail_user, gmail_user, f"Subject: SMTP test\n\nSMTP working from Render.")
+        return {"smtp_ok": True, "sent_to": gmail_user}
+    except Exception as e:
+        return {"smtp_ok": False, "error": str(e), "sent_to": gmail_user}
 
 
 # ── Get current user ───────────────────────────────────────────────────────────
