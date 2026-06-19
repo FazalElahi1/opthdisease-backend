@@ -202,21 +202,24 @@ async def register(body: RegisterRequest):
         }
         set_doctor_doc(fb_user.uid, doctor_doc)
 
-        send_doctor_application_received(
-            doctor_email   = body.email,
-            doctor_name    = body.name,
-            license_number = body.license_number or "Not provided",
-        )
-        send_admin_new_doctor_application(
-            doctor_name    = body.name,
-            doctor_email   = body.email,
-            license_number = body.license_number or "Not provided",
-            specialties    = body.specialties or [],
-            phone          = body.phone or "",
-            gender         = body.gender or "",
-            experience     = body.experience or 0,
-            description    = body.description or "",
-        )
+        try:
+            send_doctor_application_received(
+                doctor_email   = body.email,
+                doctor_name    = body.name,
+                license_number = body.license_number or "Not provided",
+            )
+            send_admin_new_doctor_application(
+                doctor_name    = body.name,
+                doctor_email   = body.email,
+                license_number = body.license_number or "Not provided",
+                specialties    = body.specialties or [],
+                phone          = body.phone or "",
+                gender         = body.gender or "",
+                experience     = body.experience or 0,
+                description    = body.description or "",
+            )
+        except Exception:
+            pass
         return build_token_response({**user_doc}, is_new_user=True)
 
     return build_token_response({**user_doc}, is_new_user=True)

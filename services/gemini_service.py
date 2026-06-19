@@ -59,8 +59,12 @@ async def _call_gemini(prompt: str, image_base64: str = None) -> str:
             json=payload,
         )
 
+    if res.status_code == 429:
+        raise ValueError("The recommendation server is currently busy due to high demand.")
+    if res.status_code >= 500:
+        raise ValueError("The recommendation server is temporarily down.")
     if res.status_code != 200:
-        raise ValueError(f"Gemini API error {res.status_code}: {res.text}")
+        raise ValueError(f"The recommendation server is unavailable (error {res.status_code}).")
 
     data = res.json()
     return data["candidates"][0]["content"]["parts"][0]["text"]
@@ -215,4 +219,7 @@ Be specific to their profile — not generic advice."""
     try:
         return await _call_gemini(prompt)
     except Exception as e:
-        return f"Unable to generate recommendation at this time. Please consult an ophthalmologist. Error: {str(e)}"
+        err = str(e)
+        if "busy" in err or "429" in err or "demand" in err:
+            return "The server is currently busy. Please try again in a few minutes, or consult an ophthalmologist directly."
+        return "The server is currently down. Please consult an ophthalmologist directly for personalised advice."
