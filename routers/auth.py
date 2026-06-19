@@ -32,6 +32,7 @@ bearer  = HTTPBearer()
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY", "AIzaSyBmkbN1VBW3Z_sXGwddjMhFDZKymWIq0g4")
+GMAIL_USER           = os.getenv("GMAIL_USER", "")
 
 async def _firebase_verify_password(email: str, password: str) -> bool:
     """Verify email/password against Firebase Auth REST API (used after a password reset)."""
@@ -489,20 +490,39 @@ async def forgot_password(body: ForgotPasswordRequest):
 
     try:
         reset_link = firebase_auth.generate_password_reset_link(body.email)
-        send_password_reset_email(
-            to_email   = body.email,
-            name       = user_doc.get("name", ""),
-            reset_link = reset_link,
-        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not send reset email. Please try again later.",
+            detail="Could not generate reset link. Please try again later.",
+        )
+
+    sent = send_password_reset_email(
+        to_email   = body.email,
+        name       = user_doc.get("name", ""),
+        reset_link = reset_link,
+    )
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not send reset email — mail delivery failed. Please try again later.",
         )
 
     return MessageResponse(
         message="Password reset link has been sent to your email. Please check your inbox."
     )
+
+
+# ── Debug: test email delivery (remove before production) ────────────────────
+
+@router.get("/test-email")
+async def test_email():
+    from services.email_service import _send
+    ok = _send(
+        to      = GMAIL_USER,
+        subject = "OpthdiseaseAI — SMTP test",
+        html    = "<p>SMTP is working from Render.</p>",
+    )
+    return {"smtp_ok": ok, "sent_to": GMAIL_USER}
 
 
 # ── Get current user ───────────────────────────────────────────────────────────
