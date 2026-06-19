@@ -522,13 +522,16 @@ async def forgot_password(body: ForgotPasswordRequest):
 
 @router.get("/test-email")
 async def test_email(to: str = ""):
-    from services.email_service import _send_smtp, _send_resend
+    from services.email_service import _send_smtp, _send_brevo, _send_resend
     recipient = to or GMAIL_USER or ADMIN_EMAIL
-    smtp_ok   = _send_smtp(recipient, "OpthdiseaseAI — SMTP test", "<p>SMTP working.</p>")
-    resend_ok = _send_resend(recipient, "OpthdiseaseAI — Resend test", "<p>Resend working.</p>") if not smtp_ok else None
+    smtp_ok   = _send_smtp(recipient,   "OpthdiseaseAI — SMTP test",   "<p>SMTP working.</p>")
+    brevo_ok  = _send_brevo(recipient,  "OpthdiseaseAI — Brevo test",  "<p>Brevo working.</p>")
+    resend_ok = _send_resend(recipient, "OpthdiseaseAI — Resend test", "<p>Resend working.</p>")
     return {
         "smtp_ok":        smtp_ok,
+        "brevo_ok":       brevo_ok,
         "resend_ok":      resend_ok,
+        "brevo_key_set":  bool(os.getenv("BREVO_API_KEY", "")),
         "resend_key_set": bool(os.getenv("RESEND_API_KEY", "")),
         "sent_to":        recipient,
     }

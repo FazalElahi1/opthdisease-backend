@@ -14,8 +14,11 @@ ADMIN_EMAIL    = os.getenv("ADMIN_EMAIL", "")
 APP_NAME       = "OpthdiseaseAI"
 
 
+BREVO_API_KEY  = os.getenv("BREVO_API_KEY", "")
+
+
 def _send_smtp(to: str, subject: str, html: str) -> bool:
-    """Try Gmail SMTP on port 587 (STARTTLS). Works on most Render instances."""
+    """Try Gmail SMTP on port 587 (STARTTLS). Works on some Render instances."""
     if not GMAIL_USER or not GMAIL_PASSWORD:
         return False
     try:
@@ -24,7 +27,7 @@ def _send_smtp(to: str, subject: str, html: str) -> bool:
         msg["From"]    = f"{APP_NAME} <{GMAIL_USER}>"
         msg["To"]      = to
         msg.attach(MIMEText(html, "html"))
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=5) as server:
             server.ehlo()
             server.starttls()
             server.ehlo()
@@ -37,8 +40,34 @@ def _send_smtp(to: str, subject: str, html: str) -> bool:
         return False
 
 
+def _send_brevo(to: str, subject: str, html: str) -> bool:
+    """Brevo (Sendinblue) HTTP API — free plan, 300/day, sends to any address."""
+    if not BREVO_API_KEY:
+        return False
+    try:
+        r = httpx.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": BREVO_API_KEY, "Content-Type": "application/json"},
+            json={
+                "sender":   {"name": APP_NAME, "email": GMAIL_USER or "noreply@opthdiseaseai.com"},
+                "to":       [{"email": to}],
+                "subject":  subject,
+                "htmlContent": html,
+            },
+            timeout=15,
+        )
+        if r.status_code in (200, 201):
+            print(f"[Email/Brevo] Sent '{subject}' to {to}")
+            return True
+        print(f"[Email/Brevo] Error {r.status_code}: {r.text}")
+        return False
+    except Exception as e:
+        print(f"[Email/Brevo] Failed: {e}")
+        return False
+
+
 def _send_resend(to: str, subject: str, html: str) -> bool:
-    """Fallback: Resend HTTP API (always works regardless of Render instance)."""
+    """Resend HTTP API — free plan, only works for account-owner email without verified domain."""
     if not RESEND_API_KEY:
         return False
     try:
@@ -59,10 +88,13 @@ def _send_resend(to: str, subject: str, html: str) -> bool:
 
 
 def _send(to: str, subject: str, html: str) -> bool:
-    """Send email: try SMTP first, fall back to Resend if SMTP is blocked."""
+    """Send email: SMTP → Brevo → Resend, first success wins."""
     if _send_smtp(to, subject, html):
         return True
-    print(f"[Email] SMTP failed, trying Resend fallback for {to}")
+    print(f"[Email] SMTP failed, trying Brevo for {to}")
+    if _send_brevo(to, subject, html):
+        return True
+    print(f"[Email] Brevo failed, trying Resend for {to}")
     return _send_resend(to, subject, html)
 
 
