@@ -16,35 +16,16 @@ from services.notifications import send_push_notification, save_fcm_token, get_c
 
 router = APIRouter(prefix="/appointments", tags=["Appointments"])
 
-CALL_EARLY_JOIN_MINUTES = 5
-
-
-def can_join_call(slot_date: str, start_time: str, end_time: str) -> bool:
-    now = datetime.now(timezone.utc)
-    slot_start = datetime.strptime(
-        f"{slot_date} {start_time}", "%Y-%m-%d %H:%M"
-    ).replace(tzinfo=timezone.utc)
-    slot_end = datetime.strptime(
-        f"{slot_date} {end_time}", "%Y-%m-%d %H:%M"
-    ).replace(tzinfo=timezone.utc)
-    earliest_join = slot_start - timedelta(minutes=CALL_EARLY_JOIN_MINUTES)
-    return earliest_join <= now <= slot_end
-
-
 def appointment_to_response(doc: dict) -> AppointmentResponse:
     # Normalise field names — old docs used slot_start/slot_end
     slot_start = doc.get("slot_start_time") or doc.get("slot_start", "00:00")
     slot_end   = doc.get("slot_end_time")   or doc.get("slot_end",   "00:00")
-    joinable = (
-        doc.get("status") in (AppointmentStatus.CONFIRMED, AppointmentStatus.ACTIVE)
-        and can_join_call(doc.get("slot_date", ""), slot_start, slot_end)
-    )
     return AppointmentResponse(**{
         **doc,
         "slot_start_time": slot_start,
         "slot_end_time":   slot_end,
         "channel_name":    doc.get("channel_name") or doc.get("appointment_id", ""),
-        "can_join":        joinable,
+        "can_join":        doc.get("status") in (AppointmentStatus.CONFIRMED, AppointmentStatus.ACTIVE),
     })
 
 
@@ -116,7 +97,8 @@ async def get_doctor_slots(
 
         current = datetime.strptime(f"{date} {start_str}", "%Y-%m-%d %H:%M")
         end_dt  = datetime.strptime(f"{date} {end_str}",   "%Y-%m-%d %H:%M")
-        now     = datetime.now(timezone.utc).replace(tzinfo=None)
+        # Slot times are stored in PKT (UTC+5); shift UTC now to match before comparing.
+        now     = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=5)
 
         while current + timedelta(minutes=duration_min) <= end_dt:
             slot_start = current.strftime("%H:%M")

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 from models.appointment_schemas import (
     JoinCallRequest, CallTokenResponse,
@@ -12,8 +12,7 @@ from services.notifications import send_push_notification, get_current_user
 
 router = APIRouter(prefix="/calls", tags=["Video Calls"])
 
-EARLY_JOIN_MINUTES = 5
-LATE_JOIN_MINUTES  = 10
+LATE_JOIN_MINUTES = 10
 
 
 def get_appointment_or_404(appointment_id: str) -> dict:
@@ -54,29 +53,12 @@ async def join_call(
     if appt["status"] == AppointmentStatus.PENDING:
         raise HTTPException(status_code=402, detail="Payment for this appointment is not confirmed yet.")
 
-    # ── 3. Time window check 
+    # ── 3. Time window check (only block if slot has already ended)
     now = datetime.now(timezone.utc)
-
-    slot_start = datetime.strptime(
-        f"{appt['slot_date']} {appt['slot_start_time']}", "%Y-%m-%d %H:%M"
-    ).replace(tzinfo=timezone.utc)
 
     slot_end = datetime.strptime(
         f"{appt['slot_date']} {appt['slot_end_time']}", "%Y-%m-%d %H:%M"
     ).replace(tzinfo=timezone.utc)
-
-    earliest_join = slot_start - timedelta(minutes=EARLY_JOIN_MINUTES)
-
-    if now < earliest_join:
-        minutes_until = int((earliest_join - now).total_seconds() / 60)
-        raise HTTPException(
-            status_code=425,
-            detail=(
-                f"Your appointment starts at {appt['slot_start_time']}. "
-                f"You can join {EARLY_JOIN_MINUTES} minutes before. "
-                f"Please wait {minutes_until} more minute(s)."
-            ),
-        )
 
     if now > slot_end:
         
